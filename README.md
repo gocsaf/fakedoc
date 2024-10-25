@@ -14,7 +14,7 @@ Will allow the creation
 of one or many fake CSAF 2.0 documents to explore
 and test implementations of this standard.
 
-Will use the csaf go library where appropriate.
+Will use the CSAF Go library where appropriate.
 
 
 ## License
