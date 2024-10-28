@@ -104,11 +104,16 @@ func FromSchema(schema *jsonschema.Schema) (*Template, error) {
 
 func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 	name := schema.Location
+
+	// Check for recursion. If name is already in t.Types, we don't have
+	// to do anything. If the associated value is nil, we're currently
+	// building the node, otherwise the node has already been
+	// contstructed.
 	if _, ok := t.Types[name]; ok {
-		// Type is already known, so we're done
 		return nil
 	}
 	t.Types[name] = nil
+
 	ty, tschema, err := getType(schema)
 	if err != nil {
 		return err
@@ -165,4 +170,93 @@ func getSimpleType(types []string) (string, error) {
 		return "", fmt.Errorf("too many types: %v", types)
 	}
 	return types[0], nil
+}
+
+// LoadTemplate loads a template from a TOML file.
+func LoadTemplate(file string) (*Template, error) {
+	var tree map[string]any
+	_, err := toml.DecodeFile(file, &tree)
+	if err != nil {
+		return nil, err
+	}
+
+	root, err := get[string](tree, "root")
+	if err != nil {
+		return nil, err
+	}
+
+	rawTypes, err := get[map[string]any](tree, "types")
+	if err != nil {
+		return nil, err
+	}
+
+	types, err := fromRawNodes(rawTypes)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Template{Types: types, Root: root}, nil
+}
+
+func fromRawNodes(rawTypes map[string]any) (map[string]TmplNode, error) {
+	types := make(map[string]TmplNode)
+
+	for name, rawType := range rawTypes {
+		tmpl, err := fromRawType(rawType.(map[string]any))
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		types[name] = tmpl
+	}
+	return types, nil
+}
+
+func fromRawType(rawType map[string]any) (TmplNode, error) {
+	gentype, err := get[string](rawType, "type")
+	if err != nil {
+		return nil, err
+	}
+	switch gentype {
+	case "string", "number":
+		generator, err := get[string](rawType, "generator")
+		if err != nil {
+			return nil, err
+		}
+		return &TmplSimple{Generator: generator, Type: gentype}, nil
+	case "array":
+		items, err := get[string](rawType, "items")
+		if err != nil {
+			return nil, err
+		}
+		return &TmplArray{Items: items}, nil
+	case "object":
+		rawChildren, err := get[map[string]any](rawType, "children")
+		if err != nil {
+			return nil, err
+		}
+		children := make(map[string]string)
+		for name, rawType := range rawChildren {
+			typename, ok := rawType.(string)
+			if !ok {
+				return nil, fmt.Errorf("expected string, got %T", rawType)
+			}
+			children[name] = typename
+		}
+		return &TmplObject{Children: children}, nil
+	default:
+		return nil, fmt.Errorf("unknown type %v", gentype)
+	}
+}
+
+func get[T any](m map[string]any, key string) (T, error) {
+	var value T
+	v, ok := m[key]
+	if !ok {
+		return value, fmt.Errorf("missing '%s'", key)
+	}
+	value, ok = v.(T)
+	if !ok {
+		return value, fmt.Errorf("expected type %T, got %T", value, v)
+	}
+	return value, nil
 }
