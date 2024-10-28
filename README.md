@@ -16,6 +16,19 @@ and test implementations of this standard.
 
 Will use the CSAF Go library where appropriate.
 
+## Usage
+
+Create a template with
+
+``` go
+go run cmd/createtemplate/main.go  > templatem.toml
+```
+
+Use the template to generate a document. The document is written to stdout
+
+``` go
+go run cmd/fakedoc/main.go template.toml
+```
 
 ## License
 
