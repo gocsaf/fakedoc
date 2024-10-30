@@ -13,6 +13,7 @@ import (
 	"bytes"
 	_ "embed" // Used for embedding.
 	"io"
+	"strings"
 	"sync"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
@@ -84,4 +85,25 @@ func (cs *compiledSchema) getSchema() (*jsonschema.Schema, error) {
 // CompileSchema compiles and returns the JSON schema for CSAF
 func CompileSchema() (*jsonschema.Schema, error) {
 	return compiledCSAFSchema.getSchema()
+}
+
+// ShortLocation returns a shortened version of the schema's Location.
+// In the shortened form the URL prefix is replaced with a much shorter
+// prefix. The shortened form is still unique enough to identify
+// subschemas for the purposes of fakedoc
+func ShortLocation(schema *jsonschema.Schema) string {
+	location := schema.Location
+	for _, short := range shortPrefixes {
+		if shortened, ok := strings.CutPrefix(location, short.prefix); ok {
+			return short.short + ":" + shortened
+		}
+	}
+	return location
+}
+
+var shortPrefixes = []struct{ short, prefix string }{
+	{"csaf", csafSchemaURL},
+	{"cvss20", cvss20SchemaURL},
+	{"cvss30", cvss30SchemaURL},
+	{"cvss31", cvss31SchemaURL},
 }

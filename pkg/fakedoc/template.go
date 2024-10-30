@@ -94,7 +94,7 @@ func (ts *TmplSimple) AsMap() map[string]any {
 func FromSchema(schema *jsonschema.Schema) (*Template, error) {
 	template := &Template{
 		Types: make(map[string]TmplNode),
-		Root:  schema.Location,
+		Root:  ShortLocation(schema),
 	}
 	if err := template.fromSchema(schema); err != nil {
 		return nil, err
@@ -103,7 +103,7 @@ func FromSchema(schema *jsonschema.Schema) (*Template, error) {
 }
 
 func (t *Template) fromSchema(schema *jsonschema.Schema) error {
-	name := schema.Location
+	name := ShortLocation(schema)
 
 	// Check for recursion. If name is already in t.Types, we don't have
 	// to do anything. If the associated value is nil, we're currently
@@ -125,14 +125,14 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 			if err := t.fromSchema(child); err != nil {
 				return err
 			}
-			children[childName] = child.Location
+			children[childName] = ShortLocation(child)
 		}
 		t.Types[name] = &TmplObject{Children: children}
 	case "array":
 		if err := t.fromSchema(tschema.Items2020); err != nil {
 			return err
 		}
-		t.Types[name] = &TmplArray{Items: tschema.Items2020.Location}
+		t.Types[name] = &TmplArray{Items: ShortLocation(tschema.Items2020)}
 	case "string":
 		t.Types[name] = &TmplSimple{Type: "string", Generator: "default"}
 	case "number":
