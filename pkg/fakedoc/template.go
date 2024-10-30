@@ -73,6 +73,20 @@ func (ta *TmplArray) AsMap() map[string]any {
 	}
 }
 
+// TmplOneOf describes the choice between multiple types
+type TmplOneOf struct {
+	// OneOf contains the types between which to choose
+	OneOf []string `toml:"oneof"`
+}
+
+// AsMap implements TmplNode
+func (ta *TmplOneOf) AsMap() map[string]any {
+	return map[string]any{
+		"type":  "oneof",
+		"oneof": ta.OneOf,
+	}
+}
+
 // TmplSimple describes a simple type like strings and numbers
 type TmplSimple struct {
 	// Type, e.g. "string", "number"
@@ -133,6 +147,15 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 			return err
 		}
 		t.Types[name] = &TmplArray{Items: ShortLocation(tschema.Items2020)}
+	case "oneof":
+		oneof := []string{}
+		for _, alternative := range tschema.OneOf {
+			if err := t.fromSchema(alternative); err != nil {
+				return err
+			}
+			oneof = append(oneof, ShortLocation(alternative))
+		}
+		t.Types[name] = &TmplOneOf{OneOf: oneof}
 	case "string":
 		t.Types[name] = &TmplSimple{Type: "string", Generator: "default"}
 	case "number":
@@ -155,8 +178,7 @@ func getType(schema *jsonschema.Schema) (string, *jsonschema.Schema, error) {
 		return getType(schema.Ref)
 	}
 	if len(schema.OneOf) > 0 {
-		// FIXME: handle OneOf properly
-		return getType(schema.OneOf[0])
+		return "oneof", schema, nil
 	}
 
 	return "", nil, fmt.Errorf("could not determine type of %s", schema.Location)
@@ -223,6 +245,8 @@ func decodeType(md toml.MetaData, primType toml.Primitive) (TmplNode, error) {
 		return decodePrimitive[TmplSimple](md, primType)
 	case "array":
 		return decodePrimitive[TmplArray](md, primType)
+	case "oneof":
+		return decodePrimitive[TmplOneOf](md, primType)
 	case "object":
 		return decodePrimitive[TmplObject](md, primType)
 	default:

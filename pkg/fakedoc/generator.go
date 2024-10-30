@@ -52,6 +52,8 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 			return nil, err
 		}
 		return []any{item}, nil
+	case *TmplOneOf:
+		return gen.generateNode(node.OneOf[0], depth-1)
 	case *TmplSimple:
 		switch node.Type {
 		case "string":
