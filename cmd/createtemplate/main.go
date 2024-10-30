@@ -18,14 +18,21 @@ import (
 )
 
 func main() {
+	err := createTemplate()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func createTemplate() error {
 	schema, err := fakedoc.CompileSchema()
 	if err != nil {
-		log.Fatalf("%v", err)
+		return err
 	}
 
 	template, err := fakedoc.FromSchema(schema)
 	if err != nil {
-		log.Fatalf("%v", err)
+		return err
 	}
-	template.Write(os.Stdout)
+	return template.Write(os.Stdout)
 }
