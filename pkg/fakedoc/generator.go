@@ -8,17 +8,23 @@
 
 package fakedoc
 
-import "fmt"
+import (
+	"fmt"
+	"math/rand/v2"
+	"strings"
+)
 
 // Generator is the type of CSAF document generators
 type Generator struct {
 	Template *Template
+	Rand     *rand.Rand
 }
 
 // NewGenerator creates a new Generator based on Template.
 func NewGenerator(tmpl *Template) *Generator {
 	return &Generator{
 		Template: tmpl,
+		Rand:     rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
 	}
 }
 
@@ -47,18 +53,33 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 		if depth <= 0 {
 			return []any{}, nil
 		}
-		item, err := gen.generateNode(node.Items, depth-1)
-		if err != nil {
-			return nil, err
+		length := gen.Rand.IntN(5)
+		items := make([]any, length)
+		for i := 0; i < length; i++ {
+			item, err := gen.generateNode(node.Items, depth-1)
+			if err != nil {
+				return nil, err
+			}
+			items[i] = item
 		}
-		return []any{item}, nil
+		return items, nil
 	case *TmplOneOf:
-		return gen.generateNode(node.OneOf[0], depth-1)
+		typename := node.OneOf[gen.Rand.IntN(len(node.OneOf))]
+		return gen.generateNode(typename, depth-1)
 	case *TmplString:
-		return "some string", nil
+		return gen.randomString(), nil
 	case *TmplNumber:
-		return 0, nil
+		return gen.Rand.Int(), nil
 	default:
 		return nil, fmt.Errorf("unexpected template node type %T", nodeTmpl)
 	}
+}
+
+func (gen *Generator) randomString() string {
+	const chars = " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	var builder strings.Builder
+	for i := 0; i < 10; i++ {
+		builder.WriteByte(chars[gen.Rand.IntN(len(chars))])
+	}
+	return builder.String()
 }
