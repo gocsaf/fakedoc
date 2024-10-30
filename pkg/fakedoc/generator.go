@@ -67,7 +67,7 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 		typename := node.OneOf[gen.Rand.IntN(len(node.OneOf))]
 		return gen.generateNode(typename, depth-1)
 	case *TmplString:
-		return gen.randomString(), nil
+		return gen.randomString(node.MinLength, node.MaxLength), nil
 	case *TmplNumber:
 		return gen.Rand.Int(), nil
 	default:
@@ -75,10 +75,18 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 	}
 }
 
-func (gen *Generator) randomString() string {
+func (gen *Generator) randomString(minlength, maxlength int) string {
 	const chars = " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	if minlength < 0 {
+		minlength = 0
+	}
+	if maxlength < 0 {
+		// FIXME: make bound on maximum length configurable
+		maxlength = minlength + 10
+	}
+	length := minlength + gen.Rand.IntN(maxlength-minlength+1)
 	var builder strings.Builder
-	for i := 0; i < 10; i++ {
+	for i := 0; i < length; i++ {
 		builder.WriteByte(chars[gen.Rand.IntN(len(chars))])
 	}
 	return builder.String()

@@ -89,6 +89,10 @@ func (ta *TmplOneOf) AsMap() map[string]any {
 
 // TmplString describes how to generate strings
 type TmplString struct {
+	// MinLength is the minimum length of the generated strings
+	MinLength int `toml:"minlength"`
+	// MaxLength is the maximum length of the generated strings
+	MaxLength int `toml:"maxlength"`
 	// Which generator to use. For now, this should be "default"
 	Generator string `toml:"generator"`
 }
@@ -97,6 +101,8 @@ type TmplString struct {
 func (ts *TmplString) AsMap() map[string]any {
 	return map[string]any{
 		"type":      "string",
+		"minlength": ts.MinLength,
+		"maxlength": ts.MaxLength,
 		"generator": ts.Generator,
 	}
 }
@@ -168,7 +174,11 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 		}
 		t.Types[name] = &TmplOneOf{OneOf: oneof}
 	case "string":
-		t.Types[name] = &TmplString{Generator: "default"}
+		t.Types[name] = &TmplString{
+			MinLength: tschema.MinLength,
+			MaxLength: tschema.MaxLength,
+			Generator: "default",
+		}
 	case "number":
 		t.Types[name] = &TmplNumber{Generator: "default"}
 	default:
