@@ -54,15 +54,10 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 		return []any{item}, nil
 	case *TmplOneOf:
 		return gen.generateNode(node.OneOf[0], depth-1)
-	case *TmplSimple:
-		switch node.Type {
-		case "string":
-			return "some string", nil
-		case "number":
-			return 0, nil
-		default:
-			return nil, fmt.Errorf("unknown simple type '%s'", node.Type)
-		}
+	case *TmplString:
+		return "some string", nil
+	case *TmplNumber:
+		return 0, nil
 	default:
 		return nil, fmt.Errorf("unexpected template node type %T", nodeTmpl)
 	}

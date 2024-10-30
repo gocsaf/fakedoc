@@ -87,19 +87,30 @@ func (ta *TmplOneOf) AsMap() map[string]any {
 	}
 }
 
-// TmplSimple describes a simple type like strings and numbers
-type TmplSimple struct {
-	// Type, e.g. "string", "number"
-	Type string `toml:"type"`
-
-	// Which generator to use. For now, this shoudl be "default"
+// TmplString describes how to generate strings
+type TmplString struct {
+	// Which generator to use. For now, this should be "default"
 	Generator string `toml:"generator"`
 }
 
 // AsMap implements TmplNode
-func (ts *TmplSimple) AsMap() map[string]any {
+func (ts *TmplString) AsMap() map[string]any {
 	return map[string]any{
-		"type":      ts.Type,
+		"type":      "string",
+		"generator": ts.Generator,
+	}
+}
+
+// TmplNumber describes how to generate numbers
+type TmplNumber struct {
+	// Which generator to use. For now, this should be "default"
+	Generator string `toml:"generator"`
+}
+
+// AsMap implements TmplNode
+func (ts *TmplNumber) AsMap() map[string]any {
+	return map[string]any{
+		"type":      "number",
 		"generator": ts.Generator,
 	}
 }
@@ -157,9 +168,9 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 		}
 		t.Types[name] = &TmplOneOf{OneOf: oneof}
 	case "string":
-		t.Types[name] = &TmplSimple{Type: "string", Generator: "default"}
+		t.Types[name] = &TmplString{Generator: "default"}
 	case "number":
-		t.Types[name] = &TmplSimple{Type: "number", Generator: "default"}
+		t.Types[name] = &TmplNumber{Generator: "default"}
 	default:
 		return fmt.Errorf("unexpected type: %s", ty)
 	}
@@ -241,8 +252,10 @@ func decodeType(md toml.MetaData, primType toml.Primitive) (TmplNode, error) {
 	}
 
 	switch typename {
-	case "string", "number":
-		return decodePrimitive[TmplSimple](md, primType)
+	case "string":
+		return decodePrimitive[TmplString](md, primType)
+	case "number":
+		return decodePrimitive[TmplNumber](md, primType)
 	case "array":
 		return decodePrimitive[TmplArray](md, primType)
 	case "oneof":
