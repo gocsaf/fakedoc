@@ -21,7 +21,7 @@ Will use the CSAF Go library where appropriate.
 Create a template with
 
 ``` go
-go run cmd/createtemplate/main.go  > templatem.toml
+go run cmd/createtemplate/main.go  > template.toml
 ```
 
 Use the template to generate a document. The document is written to stdout
