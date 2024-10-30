@@ -48,7 +48,7 @@ type TmplNode interface {
 type TmplObject struct {
 	// Children contains the names of the properties and their
 	// corresponding type
-	Children map[string]string
+	Children map[string]string `toml:"children"`
 }
 
 // AsMap implements TmplNode
@@ -62,7 +62,7 @@ func (to *TmplObject) AsMap() map[string]any {
 // TmplArray describes a JSON array
 type TmplArray struct {
 	// Items is the type of the array items
-	Items string
+	Items string `toml:"items"`
 }
 
 // AsMap implements TmplNode
@@ -76,10 +76,10 @@ func (ta *TmplArray) AsMap() map[string]any {
 // TmplSimple describes a simple type like strings and numbers
 type TmplSimple struct {
 	// Type, e.g. "string", "number"
-	Type string
+	Type string `toml:"type"`
 
 	// Which generator to use. For now, this shoudl be "default"
-	Generator string
+	Generator string `toml:"generator"`
 }
 
 // AsMap implements TmplNode
@@ -174,35 +174,31 @@ func getSimpleType(types []string) (string, error) {
 
 // LoadTemplate loads a template from a TOML file.
 func LoadTemplate(file string) (*Template, error) {
-	var tree map[string]any
-	_, err := toml.DecodeFile(file, &tree)
+	var template struct {
+		Root  string                    `toml:"root"`
+		Types map[string]toml.Primitive `toml:"types"`
+	}
+	md, err := toml.DecodeFile(file, &template)
 	if err != nil {
 		return nil, err
 	}
 
-	root, err := get[string](tree, "root")
+	types, err := decodeTypes(md, template.Types)
 	if err != nil {
 		return nil, err
 	}
 
-	rawTypes, err := get[map[string]any](tree, "types")
-	if err != nil {
-		return nil, err
-	}
-
-	types, err := fromRawNodes(rawTypes)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Template{Types: types, Root: root}, nil
+	return &Template{Types: types, Root: template.Root}, nil
 }
 
-func fromRawNodes(rawTypes map[string]any) (map[string]TmplNode, error) {
+func decodeTypes(
+	md toml.MetaData,
+	primTypes map[string]toml.Primitive,
+) (map[string]TmplNode, error) {
 	types := make(map[string]TmplNode)
 
-	for name, rawType := range rawTypes {
-		tmpl, err := fromRawType(rawType.(map[string]any))
+	for name, rawType := range primTypes {
+		tmpl, err := decodeType(md, rawType)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
@@ -211,52 +207,33 @@ func fromRawNodes(rawTypes map[string]any) (map[string]TmplNode, error) {
 	return types, nil
 }
 
-func fromRawType(rawType map[string]any) (TmplNode, error) {
-	gentype, err := get[string](rawType, "type")
-	if err != nil {
+func decodeType(md toml.MetaData, primType toml.Primitive) (TmplNode, error) {
+	var primMap map[string]toml.Primitive
+	if err := md.PrimitiveDecode(primType, &primMap); err != nil {
 		return nil, err
 	}
-	switch gentype {
+
+	var typename string
+	if err := md.PrimitiveDecode(primMap["type"], &typename); err != nil {
+		return nil, err
+	}
+
+	switch typename {
 	case "string", "number":
-		generator, err := get[string](rawType, "generator")
-		if err != nil {
-			return nil, err
-		}
-		return &TmplSimple{Generator: generator, Type: gentype}, nil
+		return decodePrimitive[TmplSimple](md, primType)
 	case "array":
-		items, err := get[string](rawType, "items")
-		if err != nil {
-			return nil, err
-		}
-		return &TmplArray{Items: items}, nil
+		return decodePrimitive[TmplArray](md, primType)
 	case "object":
-		rawChildren, err := get[map[string]any](rawType, "children")
-		if err != nil {
-			return nil, err
-		}
-		children := make(map[string]string)
-		for name, rawType := range rawChildren {
-			typename, ok := rawType.(string)
-			if !ok {
-				return nil, fmt.Errorf("expected string, got %T", rawType)
-			}
-			children[name] = typename
-		}
-		return &TmplObject{Children: children}, nil
+		return decodePrimitive[TmplObject](md, primType)
 	default:
-		return nil, fmt.Errorf("unknown type %v", gentype)
+		return nil, fmt.Errorf("unknown type %v", typename)
 	}
 }
 
-func get[T any](m map[string]any, key string) (T, error) {
-	var value T
-	v, ok := m[key]
-	if !ok {
-		return value, fmt.Errorf("missing '%s'", key)
+func decodePrimitive[T any](md toml.MetaData, primType toml.Primitive) (*T, error) {
+	var template T
+	if err := md.PrimitiveDecode(primType, &template); err != nil {
+		return nil, err
 	}
-	value, ok = v.(T)
-	if !ok {
-		return value, fmt.Errorf("expected type %T, got %T", value, v)
-	}
-	return value, nil
+	return &template, nil
 }
