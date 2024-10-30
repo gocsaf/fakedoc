@@ -23,17 +23,24 @@ func main() {
 		templatefile = os.Args[1]
 	}
 
-	templ, err := fakedoc.LoadTemplate(templatefile)
+	err := generate(templatefile)
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+func generate(templatefile string) error {
+	templ, err := fakedoc.LoadTemplate(templatefile)
+	if err != nil {
+		return err
 	}
 
 	generator := fakedoc.NewGenerator(templ)
 	csaf, err := generator.Generate()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	writeJSON(csaf)
+	return writeJSON(csaf)
 }
 
 func writeJSON(doc any) error {
