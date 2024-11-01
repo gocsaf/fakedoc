@@ -46,16 +46,16 @@ type TmplNode interface {
 
 // TmplObject describes a JSON object
 type TmplObject struct {
-	// Children contains the names of the properties and their
+	// Properties contains the names of the properties and their
 	// corresponding type
-	Children map[string]string `toml:"children"`
+	Properties map[string]string `toml:"properties"`
 }
 
 // AsMap implements TmplNode
 func (to *TmplObject) AsMap() map[string]any {
 	return map[string]any{
-		"type":     "object",
-		"children": to.Children,
+		"type":       "object",
+		"properties": to.Properties,
 	}
 }
 
@@ -163,14 +163,14 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 	}
 	switch ty {
 	case "object":
-		children := make(map[string]string)
-		for childName, child := range tschema.Properties {
-			if err := t.fromSchema(child); err != nil {
+		properties := make(map[string]string)
+		for propName, prop := range tschema.Properties {
+			if err := t.fromSchema(prop); err != nil {
 				return err
 			}
-			children[childName] = ShortLocation(child)
+			properties[propName] = ShortLocation(prop)
 		}
-		t.Types[name] = &TmplObject{Children: children}
+		t.Types[name] = &TmplObject{Properties: properties}
 	case "array":
 		if err := t.fromSchema(tschema.Items2020); err != nil {
 			return err

@@ -40,15 +40,15 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 	}
 	switch node := nodeTmpl.(type) {
 	case *TmplObject:
-		children := make(map[string]any)
-		for name, childType := range node.Children {
-			child, err := gen.generateNode(childType, depth-1)
+		properties := make(map[string]any)
+		for name, propType := range node.Properties {
+			prop, err := gen.generateNode(propType, depth-1)
 			if err != nil {
 				return nil, err
 			}
-			children[name] = child
+			properties[name] = prop
 		}
-		return children, nil
+		return properties, nil
 	case *TmplArray:
 		if depth <= 0 {
 			return []any{}, nil
