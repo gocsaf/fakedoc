@@ -47,11 +47,11 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 		}
 		return gen.randomArray(node, depth)
 	case *TmplOneOf:
-		typename := node.OneOf[gen.Rand.IntN(len(node.OneOf))]
+		typename := choose(gen.Rand, node.OneOf)
 		return gen.generateNode(typename, depth-1)
 	case *TmplString:
 		if len(node.Enum) > 0 {
-			return node.Enum[gen.Rand.IntN(len(node.Enum))], nil
+			return choose(gen.Rand, node.Enum), nil
 		}
 		return gen.randomString(node.MinLength, node.MaxLength), nil
 	case *TmplNumber:
@@ -73,7 +73,7 @@ func (gen *Generator) randomString(minlength, maxlength int) string {
 	length := minlength + gen.Rand.IntN(maxlength-minlength+1)
 	var builder strings.Builder
 	for i := 0; i < length; i++ {
-		builder.WriteByte(chars[gen.Rand.IntN(len(chars))])
+		builder.WriteByte(choose(gen.Rand, []byte(chars)))
 	}
 	return builder.String()
 }
