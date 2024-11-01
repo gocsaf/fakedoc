@@ -49,13 +49,16 @@ type TmplObject struct {
 	// Properties contains the names of the properties and their
 	// corresponding type
 	Properties map[string]string `toml:"properties"`
+
+	Probabilities map[string]float32 `toml:"probabilities"`
 }
 
 // AsMap implements TmplNode
 func (to *TmplObject) AsMap() map[string]any {
 	return map[string]any{
-		"type":       "object",
-		"properties": to.Properties,
+		"type":          "object",
+		"properties":    to.Properties,
+		"probabilities": to.Probabilities,
 	}
 }
 
@@ -170,7 +173,23 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 			}
 			properties[propName] = ShortLocation(prop)
 		}
-		t.Types[name] = &TmplObject{Properties: properties}
+
+		// Preset probabilities for the properties. Required properties
+		// have probability 1, others get some fixed smaller value.
+		probabilities := map[string]float32{}
+		for _, name := range tschema.Required {
+			probabilities[name] = 1.0
+		}
+		for name := range properties {
+			_, ok := probabilities[name]
+			if !ok {
+				probabilities[name] = 0.5
+			}
+		}
+		t.Types[name] = &TmplObject{
+			Properties:    properties,
+			Probabilities: probabilities,
+		}
 	case "array":
 		if err := t.fromSchema(tschema.Items2020); err != nil {
 			return err

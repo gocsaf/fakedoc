@@ -40,15 +40,7 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 	}
 	switch node := nodeTmpl.(type) {
 	case *TmplObject:
-		properties := make(map[string]any)
-		for name, propType := range node.Properties {
-			prop, err := gen.generateNode(propType, depth-1)
-			if err != nil {
-				return nil, err
-			}
-			properties[name] = prop
-		}
-		return properties, nil
+		return gen.generateObject(node, depth)
 	case *TmplArray:
 		if depth <= 0 {
 			return []any{}, nil
@@ -108,4 +100,20 @@ func (gen *Generator) randomArray(tmpl *TmplArray, depth int) (any, error) {
 		items[i] = item
 	}
 	return items, nil
+}
+
+func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
+	properties := make(map[string]any)
+	for name, propType := range node.Properties {
+		probabiliy, ok := node.Probabilities[name]
+		if !ok || gen.Rand.Float32() > probabiliy {
+			continue
+		}
+		prop, err := gen.generateNode(propType, depth-1)
+		if err != nil {
+			return nil, err
+		}
+		properties[name] = prop
+	}
+	return properties, nil
 }
