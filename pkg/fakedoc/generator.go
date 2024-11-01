@@ -53,16 +53,7 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 		if depth <= 0 {
 			return []any{}, nil
 		}
-		length := gen.Rand.IntN(5)
-		items := make([]any, length)
-		for i := 0; i < length; i++ {
-			item, err := gen.generateNode(node.Items, depth-1)
-			if err != nil {
-				return nil, err
-			}
-			items[i] = item
-		}
-		return items, nil
+		return gen.randomArray(node, depth)
 	case *TmplOneOf:
 		typename := node.OneOf[gen.Rand.IntN(len(node.OneOf))]
 		return gen.generateNode(typename, depth-1)
@@ -93,4 +84,28 @@ func (gen *Generator) randomString(minlength, maxlength int) string {
 		builder.WriteByte(chars[gen.Rand.IntN(len(chars))])
 	}
 	return builder.String()
+}
+
+func (gen *Generator) randomArray(tmpl *TmplArray, depth int) (any, error) {
+	minitems := tmpl.MinItems
+	maxitems := tmpl.MaxItems
+
+	if minitems < 0 {
+		minitems = 0
+	}
+	if maxitems < 0 {
+		// FIXME: make bound on maximum length configurable
+		maxitems = minitems + 2
+	}
+
+	length := minitems + gen.Rand.IntN(maxitems-minitems+1)
+	items := make([]any, length)
+	for i := 0; i < length; i++ {
+		item, err := gen.generateNode(tmpl.Items, depth-1)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = item
+	}
+	return items, nil
 }

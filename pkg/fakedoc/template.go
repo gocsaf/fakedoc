@@ -63,13 +63,20 @@ func (to *TmplObject) AsMap() map[string]any {
 type TmplArray struct {
 	// Items is the type of the array items
 	Items string `toml:"items"`
+
+	// MinItems is the minimum length of the generated array
+	MinItems int `toml:"minitems"`
+	// MaxLength is the maximum length of the generated array
+	MaxItems int `toml:"maxitems"`
 }
 
 // AsMap implements TmplNode
 func (ta *TmplArray) AsMap() map[string]any {
 	return map[string]any{
-		"type":  "array",
-		"items": ta.Items,
+		"type":     "array",
+		"items":    ta.Items,
+		"minitems": ta.MinItems,
+		"maxitems": ta.MaxItems,
 	}
 }
 
@@ -168,7 +175,11 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 		if err := t.fromSchema(tschema.Items2020); err != nil {
 			return err
 		}
-		t.Types[name] = &TmplArray{Items: ShortLocation(tschema.Items2020)}
+		t.Types[name] = &TmplArray{
+			Items:    ShortLocation(tschema.Items2020),
+			MinItems: tschema.MinItems,
+			MaxItems: tschema.MaxItems,
+		}
 	case "oneof":
 		oneof := []string{}
 		for _, alternative := range tschema.OneOf {
