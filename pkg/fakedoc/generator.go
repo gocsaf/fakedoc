@@ -67,6 +67,9 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 		typename := node.OneOf[gen.Rand.IntN(len(node.OneOf))]
 		return gen.generateNode(typename, depth-1)
 	case *TmplString:
+		if len(node.Enum) > 0 {
+			return node.Enum[gen.Rand.IntN(len(node.Enum))], nil
+		}
 		return gen.randomString(node.MinLength, node.MaxLength), nil
 	case *TmplNumber:
 		return gen.Rand.Int(), nil
