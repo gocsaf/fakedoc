@@ -107,6 +107,13 @@ type TmplString struct {
 	// Enum contains the values to choose from.
 	Enum []string `toml:"enum"`
 
+	// Pattern is a regular expression the string should match
+	Pattern string `toml:"pattern"`
+
+	// compiled is a compiled version of Pattern, usable for generating
+	// strings.
+	compiled *Pattern
+
 	// Which generator to use. For now, this should be "default"
 	Generator string `toml:"generator"`
 }
@@ -118,6 +125,7 @@ func (ts *TmplString) AsMap() map[string]any {
 		"minlength": ts.MinLength,
 		"maxlength": ts.MaxLength,
 		"enum":      ts.Enum,
+		"pattern":   ts.Pattern,
 		"generator": ts.Generator,
 	}
 }
@@ -213,10 +221,15 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 		for _, v := range tschema.Enum {
 			enum = append(enum, v.(string))
 		}
+		pattern := ""
+		if tschema.Pattern != nil {
+			pattern = tschema.Pattern.String()
+		}
 		t.Types[name] = &TmplString{
 			MinLength: tschema.MinLength,
 			MaxLength: tschema.MaxLength,
 			Enum:      enum,
+			Pattern:   pattern,
 			Generator: "default",
 		}
 	case "number":
