@@ -132,6 +132,12 @@ func (ts *TmplString) AsMap() map[string]any {
 
 // TmplNumber describes how to generate numbers
 type TmplNumber struct {
+	// Minimum is the minum value of the generated numbers
+	Minimum *float32
+
+	// Maximum is the maximum value of the generated numbers
+	Maximum *float32
+
 	// Which generator to use. For now, this should be "default"
 	Generator string `toml:"generator"`
 }
@@ -140,6 +146,8 @@ type TmplNumber struct {
 func (ts *TmplNumber) AsMap() map[string]any {
 	return map[string]any{
 		"type":      "number",
+		"minimum":   ts.Minimum,
+		"maximum":   ts.Maximum,
 		"generator": ts.Generator,
 	}
 }
@@ -233,7 +241,20 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 			Generator: "default",
 		}
 	case "number":
-		t.Types[name] = &TmplNumber{Generator: "default"}
+		var minimum, maximum *float32
+		if tschema.Minimum != nil {
+			m, _ := tschema.Minimum.Float32()
+			minimum = &m
+		}
+		if tschema.Maximum != nil {
+			m, _ := tschema.Maximum.Float32()
+			maximum = &m
+		}
+		t.Types[name] = &TmplNumber{
+			Minimum:   minimum,
+			Maximum:   maximum,
+			Generator: "default",
+		}
 	default:
 		return fmt.Errorf("unexpected type: %s", ty)
 	}

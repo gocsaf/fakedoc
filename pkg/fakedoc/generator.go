@@ -10,6 +10,7 @@ package fakedoc
 
 import (
 	"fmt"
+	"math"
 	"math/rand/v2"
 	"strings"
 )
@@ -65,7 +66,7 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 		}
 		return gen.randomString(node.MinLength, node.MaxLength), nil
 	case *TmplNumber:
-		return gen.Rand.Int(), nil
+		return gen.randomNumber(node.Minimum, node.Maximum), nil
 	default:
 		return nil, fmt.Errorf("unexpected template node type %T", nodeTmpl)
 	}
@@ -126,4 +127,17 @@ func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
 		properties[name] = prop
 	}
 	return properties, nil
+}
+
+func (gen *Generator) randomNumber(minimum, maximum *float32) float32 {
+	low := float64(-math.MaxFloat32)
+	high := float64(math.MaxFloat32)
+	if minimum != nil {
+		low = float64(*minimum)
+	}
+	if maximum != nil {
+		high = float64(*maximum)
+	}
+
+	return float32(low + gen.Rand.Float64()*(high-low))
 }
