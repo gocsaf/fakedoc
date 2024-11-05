@@ -87,16 +87,23 @@ type TmplArray struct {
 
 // AsMap implements TmplNode
 func (t *TmplArray) AsMap() map[string]any {
-	return map[string]any{
-		"type":     "array",
-		"items":    t.Items,
-		"minitems": t.MinItems,
-		"maxitems": t.MaxItems,
+	m := map[string]any{
+		"type":  "array",
+		"items": t.Items,
 	}
+	if t.MinItems != -1 {
+		m["minitems"] = t.MinItems
+	}
+	if t.MaxItems != -1 {
+		m["maxitems"] = t.MaxItems
+	}
+	return m
 }
 
 // FromToml implemts TmplNode
 func (t *TmplArray) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	t.MinItems = -1
+	t.MaxItems = -1
 	if err := md.PrimitiveDecode(primType, t); err != nil {
 		return err
 	}
@@ -148,18 +155,32 @@ type TmplString struct {
 
 // AsMap implements TmplNode
 func (t *TmplString) AsMap() map[string]any {
-	return map[string]any{
-		"type":      "string",
-		"minlength": t.MinLength,
-		"maxlength": t.MaxLength,
-		"enum":      t.Enum,
-		"pattern":   t.Pattern,
-		"generator": t.Generator,
+	m := map[string]any{
+		"type": "string",
 	}
+	if t.Generator != "default" {
+		m["generator"] = t.Generator
+	}
+	if t.MinLength != -1 {
+		m["minlength"] = t.MinLength
+	}
+	if t.MaxLength != -1 {
+		m["maxlength"] = t.MaxLength
+	}
+	if len(t.Enum) > 0 {
+		m["enum"] = t.Enum
+	}
+	if len(t.Pattern) > 0 {
+		m["pattern"] = t.Pattern
+	}
+	return m
 }
 
 // FromToml implemts TmplNode
 func (t *TmplString) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	t.MinLength = -1
+	t.MaxLength = -1
+	t.Generator = "default"
 	if err := md.PrimitiveDecode(primType, t); err != nil {
 		return err
 	}
@@ -180,16 +201,24 @@ type TmplNumber struct {
 
 // AsMap implements TmplNode
 func (t *TmplNumber) AsMap() map[string]any {
-	return map[string]any{
-		"type":      "number",
-		"minimum":   t.Minimum,
-		"maximum":   t.Maximum,
-		"generator": t.Generator,
+	m := map[string]any{
+		"type": "number",
 	}
+	if t.Generator != "default" {
+		m["generator"] = t.Generator
+	}
+	if t.Minimum != nil {
+		m["minimum"] = *t.Minimum
+	}
+	if t.Maximum != nil {
+		m["maximum"] = *t.Maximum
+	}
+	return m
 }
 
 // FromToml implemts TmplNode
 func (t *TmplNumber) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	t.Generator = "default"
 	if err := md.PrimitiveDecode(primType, t); err != nil {
 		return err
 	}
