@@ -54,11 +54,11 @@ type TmplObject struct {
 }
 
 // AsMap implements TmplNode
-func (to *TmplObject) AsMap() map[string]any {
+func (t *TmplObject) AsMap() map[string]any {
 	return map[string]any{
 		"type":          "object",
-		"properties":    to.Properties,
-		"probabilities": to.Probabilities,
+		"properties":    t.Properties,
+		"probabilities": t.Probabilities,
 	}
 }
 
@@ -74,12 +74,12 @@ type TmplArray struct {
 }
 
 // AsMap implements TmplNode
-func (ta *TmplArray) AsMap() map[string]any {
+func (t *TmplArray) AsMap() map[string]any {
 	return map[string]any{
 		"type":     "array",
-		"items":    ta.Items,
-		"minitems": ta.MinItems,
-		"maxitems": ta.MaxItems,
+		"items":    t.Items,
+		"minitems": t.MinItems,
+		"maxitems": t.MaxItems,
 	}
 }
 
@@ -90,10 +90,10 @@ type TmplOneOf struct {
 }
 
 // AsMap implements TmplNode
-func (ta *TmplOneOf) AsMap() map[string]any {
+func (t *TmplOneOf) AsMap() map[string]any {
 	return map[string]any{
 		"type":  "oneof",
-		"oneof": ta.OneOf,
+		"oneof": t.OneOf,
 	}
 }
 
@@ -119,14 +119,14 @@ type TmplString struct {
 }
 
 // AsMap implements TmplNode
-func (ts *TmplString) AsMap() map[string]any {
+func (t *TmplString) AsMap() map[string]any {
 	return map[string]any{
 		"type":      "string",
-		"minlength": ts.MinLength,
-		"maxlength": ts.MaxLength,
-		"enum":      ts.Enum,
-		"pattern":   ts.Pattern,
-		"generator": ts.Generator,
+		"minlength": t.MinLength,
+		"maxlength": t.MaxLength,
+		"enum":      t.Enum,
+		"pattern":   t.Pattern,
+		"generator": t.Generator,
 	}
 }
 
@@ -143,12 +143,12 @@ type TmplNumber struct {
 }
 
 // AsMap implements TmplNode
-func (ts *TmplNumber) AsMap() map[string]any {
+func (t *TmplNumber) AsMap() map[string]any {
 	return map[string]any{
 		"type":      "number",
-		"minimum":   ts.Minimum,
-		"maximum":   ts.Maximum,
-		"generator": ts.Generator,
+		"minimum":   t.Minimum,
+		"maximum":   t.Maximum,
+		"generator": t.Generator,
 	}
 }
 
