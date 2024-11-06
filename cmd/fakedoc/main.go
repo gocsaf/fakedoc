@@ -11,6 +11,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"log"
 	"os"
 
@@ -18,10 +19,10 @@ import (
 )
 
 func main() {
-	templatefile := "template.toml"
-	if len(os.Args) > 1 {
-		templatefile = os.Args[1]
-	}
+	var templatefile string
+
+	flag.StringVar(&templatefile, "template", "template.toml", "template file")
+	flag.Parse()
 
 	err := generate(templatefile)
 	if err != nil {
