@@ -54,15 +54,8 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 		if len(node.Enum) > 0 {
 			return choose(gen.Rand, node.Enum), nil
 		}
-		if node.Pattern != "" {
-			if node.compiled == nil {
-				compiled, err := CompileRegexp(node.Pattern)
-				if err != nil {
-					return nil, err
-				}
-				node.compiled = compiled
-			}
-			return node.compiled.Sample(gen.Rand), nil
+		if node.Pattern != nil {
+			return node.Pattern.Sample(gen.Rand), nil
 		}
 		return gen.randomString(node.MinLength, node.MaxLength), nil
 	case *TmplNumber:

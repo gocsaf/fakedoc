@@ -17,6 +17,8 @@ import (
 
 // Pattern generates strings based on a regular expression
 type Pattern struct {
+	// the original regular expression
+	Pattern string
 	// The AST of the regular expression
 	ast *syntax.Regexp
 }
@@ -26,16 +28,28 @@ type Pattern struct {
 // whether the pattern only uses features that the random match
 // generator supports.
 func CompileRegexp(unparsed string) (*Pattern, error) {
+	var pat Pattern
+	if err := pat.UnmarshalText([]byte(unparsed)); err != nil {
+		return nil, err
+	}
+	return &pat, nil
+}
+
+// UnmarshalText implements the TextUnmarshaler interface
+func (pat *Pattern) UnmarshalText(text []byte) error {
+	unparsed := string(text)
 	ast, err := syntax.Parse(unparsed, syntax.Perl)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if err = checkAst(ast); err != nil {
-		return nil, err
+		return err
 	}
 
-	return &Pattern{ast: ast}, nil
+	pat.Pattern = unparsed
+	pat.ast = ast
+	return nil
 }
 
 // Sample generates a random match for the regular expression in Pattern
