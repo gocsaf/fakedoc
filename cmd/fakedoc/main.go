@@ -13,30 +13,53 @@ import (
 	"encoding/json"
 	"flag"
 	"log"
+	"math/rand/v2"
 	"os"
 
 	"github.com/gocsaf/fakedoc/pkg/fakedoc"
 )
 
+const (
+	seedDocumentation = `
+random number seed, format 'pcg:<1-8 hex digits>:<1-8 hex digits>'.
+If omitted, the generator uses a random seed.
+`
+)
+
 func main() {
-	var templatefile string
+	var (
+		templatefile string
+		seed         string
+	)
 
 	flag.StringVar(&templatefile, "template", "template.toml", "template file")
+	flag.StringVar(&seed, "seed", "", seedDocumentation)
 	flag.Parse()
 
-	err := generate(templatefile)
+	var (
+		rng *rand.Rand
+		err error
+	)
+	if seed != "" {
+		rng, err = fakedoc.ParseSeed(seed)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	err = generate(templatefile, rng)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func generate(templatefile string) error {
+func generate(templatefile string, rng *rand.Rand) error {
 	templ, err := fakedoc.LoadTemplate(templatefile)
 	if err != nil {
 		return err
 	}
 
-	generator := fakedoc.NewGenerator(templ)
+	generator := fakedoc.NewGenerator(templ, rng)
 	csaf, err := generator.Generate()
 	if err != nil {
 		return err

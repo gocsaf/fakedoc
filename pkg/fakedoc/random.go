@@ -8,10 +8,42 @@
 
 package fakedoc
 
-import "math/rand/v2"
+import (
+	"errors"
+	"math/rand/v2"
+	"regexp"
+	"strconv"
+)
 
 // choose returns a random element of choices. The element is chosen
 // with uniform distribution. The choices slice must not be empty.
 func choose[T any](rand *rand.Rand, choices []T) T {
 	return choices[rand.IntN(len(choices))]
+}
+
+// ErrSeedFormat is the error returned by ParseSeed for incorrectly
+// formatted seed values.
+var ErrSeedFormat = errors.New(
+	"seed doesn't match format 'pcg:<1-8 hex digits>:<1-8 hex digits>'",
+)
+
+var seedPattern = regexp.MustCompile("^pcg:([0-9a-fA-F]{1,8}):([0-9a-fA-F]{1,8})$")
+
+// ParseSeed parses a seed from a string and returns the resulting
+// random number generator
+func ParseSeed(seed string) (*rand.Rand, error) {
+	matches := seedPattern.FindAllStringSubmatch(seed, -1)
+	if len(matches) == 0 {
+		return nil, ErrSeedFormat
+	}
+	s1, err := strconv.ParseUint(matches[0][1], 16, 64)
+	if err != nil {
+		return nil, err
+	}
+	s2, err := strconv.ParseUint(matches[0][2], 16, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	return rand.New(rand.NewPCG(s1, s2)), nil
 }
