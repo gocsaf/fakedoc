@@ -42,6 +42,10 @@ func (t *Template) Write(out io.Writer) error {
 type TmplNode interface {
 	// AsMap returns a map describing the node for the TOML file
 	AsMap() map[string]any
+
+	// FromToml initializes a TmplNode from toml.MetaData and a
+	// toml.Primitive.
+	FromToml(md toml.MetaData, primType toml.Primitive) error
 }
 
 // TmplObject describes a JSON object
@@ -60,6 +64,14 @@ func (t *TmplObject) AsMap() map[string]any {
 		"properties":    t.Properties,
 		"probabilities": t.Probabilities,
 	}
+}
+
+// FromToml implemts TmplNode
+func (t *TmplObject) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	if err := md.PrimitiveDecode(primType, t); err != nil {
+		return err
+	}
+	return nil
 }
 
 // TmplArray describes a JSON array
@@ -83,6 +95,14 @@ func (t *TmplArray) AsMap() map[string]any {
 	}
 }
 
+// FromToml implemts TmplNode
+func (t *TmplArray) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	if err := md.PrimitiveDecode(primType, t); err != nil {
+		return err
+	}
+	return nil
+}
+
 // TmplOneOf describes the choice between multiple types
 type TmplOneOf struct {
 	// OneOf contains the types between which to choose
@@ -95,6 +115,14 @@ func (t *TmplOneOf) AsMap() map[string]any {
 		"type":  "oneof",
 		"oneof": t.OneOf,
 	}
+}
+
+// FromToml implemts TmplNode
+func (t *TmplOneOf) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	if err := md.PrimitiveDecode(primType, t); err != nil {
+		return err
+	}
+	return nil
 }
 
 // TmplString describes how to generate strings
@@ -130,6 +158,14 @@ func (t *TmplString) AsMap() map[string]any {
 	}
 }
 
+// FromToml implemts TmplNode
+func (t *TmplString) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	if err := md.PrimitiveDecode(primType, t); err != nil {
+		return err
+	}
+	return nil
+}
+
 // TmplNumber describes how to generate numbers
 type TmplNumber struct {
 	// Minimum is the minum value of the generated numbers
@@ -150,6 +186,14 @@ func (t *TmplNumber) AsMap() map[string]any {
 		"maximum":   t.Maximum,
 		"generator": t.Generator,
 	}
+}
+
+// FromToml implemts TmplNode
+func (t *TmplNumber) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	if err := md.PrimitiveDecode(primType, t); err != nil {
+		return err
+	}
+	return nil
 }
 
 // FromSchema creates a default template from a JSON schema.
@@ -335,26 +379,24 @@ func decodeType(md toml.MetaData, primType toml.Primitive) (TmplNode, error) {
 		return nil, err
 	}
 
+	var node TmplNode
 	switch typename {
 	case "string":
-		return decodePrimitive[TmplString](md, primType)
+		node = new(TmplString)
 	case "number":
-		return decodePrimitive[TmplNumber](md, primType)
+		node = new(TmplNumber)
 	case "array":
-		return decodePrimitive[TmplArray](md, primType)
+		node = new(TmplArray)
 	case "oneof":
-		return decodePrimitive[TmplOneOf](md, primType)
+		node = new(TmplOneOf)
 	case "object":
-		return decodePrimitive[TmplObject](md, primType)
+		node = new(TmplObject)
 	default:
 		return nil, fmt.Errorf("unknown type %v", typename)
 	}
-}
-
-func decodePrimitive[T any](md toml.MetaData, primType toml.Primitive) (*T, error) {
-	var template T
-	if err := md.PrimitiveDecode(primType, &template); err != nil {
+	if err := node.FromToml(md, primType); err != nil {
 		return nil, err
 	}
-	return &template, nil
+
+	return node, nil
 }
