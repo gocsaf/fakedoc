@@ -108,16 +108,15 @@ func (gen *Generator) randomArray(tmpl *TmplArray, depth int) (any, error) {
 
 func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
 	properties := make(map[string]any)
-	for name, propType := range node.Properties {
-		probabiliy, ok := node.Probabilities[name]
-		if !ok || gen.Rand.Float32() > probabiliy {
+	for _, prop := range node.Properties {
+		if gen.Rand.Float32() > prop.Probability {
 			continue
 		}
-		prop, err := gen.generateNode(propType, depth-1)
+		value, err := gen.generateNode(prop.Type, depth-1)
 		if err != nil {
 			return nil, err
 		}
-		properties[name] = prop
+		properties[prop.Name] = value
 	}
 	return properties, nil
 }

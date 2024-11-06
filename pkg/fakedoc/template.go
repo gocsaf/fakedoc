@@ -9,8 +9,10 @@
 package fakedoc
 
 import (
+	"cmp"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/BurntSushi/toml"
 	"github.com/santhosh-tekuri/jsonschema/v5"
@@ -48,21 +50,24 @@ type TmplNode interface {
 	FromToml(md toml.MetaData, primType toml.Primitive) error
 }
 
+// Property describes how to generate one of an object's properties
+type Property struct {
+	Name        string  `toml:"name"`
+	Type        string  `toml:"type"`
+	Probability float32 `toml:"probability"`
+}
+
 // TmplObject describes a JSON object
 type TmplObject struct {
-	// Properties contains the names of the properties and their
-	// corresponding type
-	Properties map[string]string `toml:"properties"`
-
-	Probabilities map[string]float32 `toml:"probabilities"`
+	// Properties describes how to generate the object's properties.
+	Properties []*Property `toml:"properties"`
 }
 
 // AsMap implements TmplNode
 func (t *TmplObject) AsMap() map[string]any {
 	return map[string]any{
-		"type":          "object",
-		"properties":    t.Properties,
-		"probabilities": t.Probabilities,
+		"type":       "object",
+		"properties": t.Properties,
 	}
 }
 
@@ -251,29 +256,37 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 	}
 	switch ty {
 	case "object":
-		properties := make(map[string]string)
-		for propName, prop := range tschema.Properties {
-			if err := t.fromSchema(prop); err != nil {
-				return err
-			}
-			properties[propName] = ShortLocation(prop)
-		}
-
 		// Preset probabilities for the properties. Required properties
-		// have probability 1, others get some fixed smaller value.
+		// have probability 1
 		probabilities := map[string]float32{}
 		for _, name := range tschema.Required {
 			probabilities[name] = 1.0
 		}
-		for name := range properties {
-			_, ok := probabilities[name]
-			if !ok {
-				probabilities[name] = 0.5
+
+		properties := []*Property{}
+		for propName, prop := range tschema.Properties {
+			if err := t.fromSchema(prop); err != nil {
+				return err
 			}
+			probability, ok := probabilities[propName]
+			if !ok {
+				// The property is not required, so use some value < 1.
+				probability = 0.5
+			}
+			properties = append(properties, &Property{
+				Name:        propName,
+				Type:        ShortLocation(prop),
+				Probability: probability,
+			})
 		}
+
+		// Sort properties by name to make the output deterministic
+		slices.SortFunc(properties, func(p1, p2 *Property) int {
+			return cmp.Compare(p1.Name, p2.Name)
+		})
+
 		t.Types[name] = &TmplObject{
-			Properties:    properties,
-			Probabilities: probabilities,
+			Properties: properties,
 		}
 	case "array":
 		if err := t.fromSchema(tschema.Items2020); err != nil {
