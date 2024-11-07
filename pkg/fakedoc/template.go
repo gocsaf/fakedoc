@@ -149,18 +149,12 @@ type TmplString struct {
 
 	// Pattern represents a regular expression the string should match
 	Pattern *Pattern `toml:"pattern"`
-
-	// Which generator to use. For now, this should be "default"
-	Generator string `toml:"generator"`
 }
 
 // AsMap implements TmplNode
 func (t *TmplString) AsMap() map[string]any {
 	m := map[string]any{
 		"type": "string",
-	}
-	if t.Generator != "default" {
-		m["generator"] = t.Generator
 	}
 	if t.MinLength != -1 {
 		m["minlength"] = t.MinLength
@@ -181,7 +175,6 @@ func (t *TmplString) AsMap() map[string]any {
 func (t *TmplString) FromToml(md toml.MetaData, primType toml.Primitive) error {
 	t.MinLength = -1
 	t.MaxLength = -1
-	t.Generator = "default"
 	if err := md.PrimitiveDecode(primType, t); err != nil {
 		return err
 	}
@@ -195,18 +188,12 @@ type TmplNumber struct {
 
 	// Maximum is the maximum value of the generated numbers
 	Maximum *float32
-
-	// Which generator to use. For now, this should be "default"
-	Generator string `toml:"generator"`
 }
 
 // AsMap implements TmplNode
 func (t *TmplNumber) AsMap() map[string]any {
 	m := map[string]any{
 		"type": "number",
-	}
-	if t.Generator != "default" {
-		m["generator"] = t.Generator
 	}
 	if t.Minimum != nil {
 		m["minimum"] = *t.Minimum
@@ -219,7 +206,6 @@ func (t *TmplNumber) AsMap() map[string]any {
 
 // FromToml implemts TmplNode
 func (t *TmplNumber) FromToml(md toml.MetaData, primType toml.Primitive) error {
-	t.Generator = "default"
 	if err := md.PrimitiveDecode(primType, t); err != nil {
 		return err
 	}
@@ -323,7 +309,6 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 			MaxLength: tschema.MaxLength,
 			Enum:      enum,
 			Pattern:   pattern,
-			Generator: "default",
 		}
 	case "number":
 		var minimum, maximum *float32
@@ -336,9 +321,8 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 			maximum = &m
 		}
 		t.Types[name] = &TmplNumber{
-			Minimum:   minimum,
-			Maximum:   maximum,
-			Generator: "default",
+			Minimum: minimum,
+			Maximum: maximum,
 		}
 	default:
 		return fmt.Errorf("unexpected type: %s", ty)
