@@ -13,6 +13,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"strings"
+	"time"
 )
 
 // Generator is the type of CSAF document generators
@@ -65,6 +66,8 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 		return gen.randomString(node.MinLength, node.MaxLength), nil
 	case *TmplNumber:
 		return gen.randomNumber(node.Minimum, node.Maximum), nil
+	case *TmplDateTime:
+		return gen.randomDateTime(node.Minimum, node.Maximum), nil
 	default:
 		return nil, fmt.Errorf("unexpected template node type %T", nodeTmpl)
 	}
@@ -137,4 +140,22 @@ func (gen *Generator) randomNumber(minimum, maximum *float32) float32 {
 	}
 
 	return float32(low + gen.Rand.Float64()*(high-low))
+}
+
+func (gen *Generator) randomDateTime(mindate, maxdate *time.Time) time.Time {
+	if mindate == nil {
+		if maxdate == nil {
+			now := time.Now()
+			maxdate = &now
+		}
+		d := maxdate.AddDate(-1, 0, 0)
+		mindate = &d
+	}
+	if maxdate == nil {
+		d := mindate.AddDate(1, 0, 0)
+		maxdate = &d
+	}
+	duration := maxdate.Sub(*mindate)
+
+	return mindate.Add(time.Duration(gen.Rand.Float64() * float64(duration)))
 }

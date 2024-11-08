@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/santhosh-tekuri/jsonschema/v5"
@@ -212,6 +213,37 @@ func (t *TmplNumber) FromToml(md toml.MetaData, primType toml.Primitive) error {
 	return nil
 }
 
+// TmplDateTime describes how to generate date/time values
+type TmplDateTime struct {
+	// Minimum is the minum value of the generated date/time values
+	Minimum *time.Time
+
+	// Maximum is the maximum value of the generated  date/time values
+	Maximum *time.Time
+}
+
+// AsMap implements TmplNode
+func (t *TmplDateTime) AsMap() map[string]any {
+	m := map[string]any{
+		"type": "date-time",
+	}
+	if t.Minimum != nil {
+		m["minimum"] = *t.Minimum
+	}
+	if t.Maximum != nil {
+		m["maximum"] = *t.Maximum
+	}
+	return m
+}
+
+// FromToml implemts TmplNode
+func (t *TmplDateTime) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	if err := md.PrimitiveDecode(primType, t); err != nil {
+		return err
+	}
+	return nil
+}
+
 // FromSchema creates a default template from a JSON schema.
 func FromSchema(schema *jsonschema.Schema) (*Template, error) {
 	template := &Template{
@@ -293,22 +325,29 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 		}
 		t.Types[name] = &TmplOneOf{OneOf: oneof}
 	case "string":
-		enum := []string{}
-		for _, v := range tschema.Enum {
-			enum = append(enum, v.(string))
-		}
-		var pattern *Pattern
-		if tschema.Pattern != nil {
-			pattern, err = CompileRegexp(tschema.Pattern.String())
-			if err != nil {
-				return nil
+		switch tschema.Format {
+		case "date-time":
+			mindate := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+			maxdate := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+			t.Types[name] = &TmplDateTime{Minimum: &mindate, Maximum: &maxdate}
+		default:
+			enum := []string{}
+			for _, v := range tschema.Enum {
+				enum = append(enum, v.(string))
 			}
-		}
-		t.Types[name] = &TmplString{
-			MinLength: tschema.MinLength,
-			MaxLength: tschema.MaxLength,
-			Enum:      enum,
-			Pattern:   pattern,
+			var pattern *Pattern
+			if tschema.Pattern != nil {
+				pattern, err = CompileRegexp(tschema.Pattern.String())
+				if err != nil {
+					return nil
+				}
+			}
+			t.Types[name] = &TmplString{
+				MinLength: tschema.MinLength,
+				MaxLength: tschema.MaxLength,
+				Enum:      enum,
+				Pattern:   pattern,
+			}
 		}
 	case "number":
 		var minimum, maximum *float32
@@ -410,6 +449,8 @@ func decodeType(md toml.MetaData, primType toml.Primitive) (TmplNode, error) {
 		node = new(TmplString)
 	case "number":
 		node = new(TmplNumber)
+	case "date-time":
+		node = new(TmplDateTime)
 	case "array":
 		node = new(TmplArray)
 	case "oneof":
