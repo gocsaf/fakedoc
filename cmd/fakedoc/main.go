@@ -12,9 +12,13 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
+	"io"
 	"log"
 	"math/rand/v2"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/gocsaf/fakedoc/pkg/fakedoc"
 )
@@ -24,16 +28,24 @@ const (
 random number seed, format 'pcg:<1-8 hex digits>:<1-8 hex digits>'.
 If omitted, the generator uses a random seed.
 `
+
+	outputDocumentation = `
+output filename. Setting this will also set the tracking ID in the
+generated file so that it matches the filename. The filename must end
+with '.json'
+`
 )
 
 func main() {
 	var (
 		templatefile string
 		seed         string
+		outputfile   string
 	)
 
 	flag.StringVar(&templatefile, "template", "template.toml", "template file")
 	flag.StringVar(&seed, "seed", "", seedDocumentation)
+	flag.StringVar(&outputfile, "o", "", outputDocumentation)
 	flag.Parse()
 
 	var (
@@ -47,13 +59,13 @@ func main() {
 		}
 	}
 
-	err = generate(templatefile, rng)
+	err = generate(templatefile, rng, outputfile)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func generate(templatefile string, rng *rand.Rand) error {
+func generate(templatefile string, rng *rand.Rand, outputfile string) error {
 	templ, err := fakedoc.LoadTemplate(templatefile)
 	if err != nil {
 		return err
@@ -64,15 +76,73 @@ func generate(templatefile string, rng *rand.Rand) error {
 	if err != nil {
 		return err
 	}
-	return writeJSON(csaf)
+
+	if outputfile != "" {
+		id, err := trackingIDFromFilename(outputfile)
+		if err != nil {
+			return err
+		}
+		if err := setValue(csaf, "document/tracking/id", id); err != nil {
+			return fmt.Errorf("setting tracking ID: %w", err)
+		}
+	}
+	return writeJSON(csaf, outputfile)
 }
 
-func writeJSON(doc any) error {
+func trackingIDFromFilename(filename string) (string, error) {
+	base := filepath.Base(filename)
+	id, found := strings.CutSuffix(base, ".json")
+	if !found {
+		return "", fmt.Errorf("filename %q doesn't have .json suffix", filename)
+	}
+	return id, nil
+}
+
+func writeJSON(doc any, outputfile string) error {
+	var out io.Writer = os.Stdout
+	if outputfile != "" {
+		var err error
+		out, err = os.Create(outputfile)
+		if err != nil {
+			return err
+		}
+	}
 	b, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return err
 	}
-	os.Stdout.Write(b)
-	os.Stdout.WriteString("\n")
+
+	_, err = out.Write(b)
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(out, "\n")
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func setValue(doc any, path string, value any) error {
+	m, ok := doc.(map[string]any)
+	if !ok {
+		return fmt.Errorf("expected map[string]any, got %T", doc)
+	}
+
+	components := strings.Split(path, "/")
+	finalKey := components[len(components)-1]
+	for i, key := range components[:len(components)-1] {
+		value, ok := m[key]
+		if !ok {
+			return fmt.Errorf("path %q not in map", strings.Join(components[:i+1], "/"))
+		}
+		m, ok = value.(map[string]any)
+		if !ok {
+			return fmt.Errorf("path %q does not refer to a map", strings.Join(components[:i+1], "/"))
+		}
+	}
+	m[finalKey] = value
+
 	return nil
 }
