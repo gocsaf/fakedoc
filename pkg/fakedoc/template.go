@@ -19,6 +19,10 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
+const (
+	uriRegexp = `(https?)://(example\.(com|org|net)|[a-zA-Z][a-zA-Z0-9]{10}\.example(/[a-zA-Z0-9.-]{1,10}){3})`
+)
+
 // Template describes the structure of the CSAF document to generate
 type Template struct {
 	// Types maps type names to the corresponding template node
@@ -335,9 +339,17 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 			for _, v := range tschema.Enum {
 				enum = append(enum, v.(string))
 			}
-			var pattern *Pattern
+			regexp := ""
 			if tschema.Pattern != nil {
-				pattern, err = CompileRegexp(tschema.Pattern.String())
+				regexp = tschema.Pattern.String()
+			}
+			if tschema.Format == "uri" && regexp == "" {
+				regexp = uriRegexp
+			}
+
+			var pattern *Pattern
+			if regexp != "" {
+				pattern, err = CompileRegexp(regexp)
 				if err != nil {
 					return nil
 				}
