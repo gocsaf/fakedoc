@@ -9,12 +9,20 @@
 package fakedoc
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"time"
 )
+
+// ErrDepthExceeded is returned as error by the generator if exceeding
+// the maximum depth of the generated document could not be avoided.
+// This is mostly used internally in the generator and is unlikely to be
+// returned from Generate method.
+var ErrDepthExceeded = errors.New("maximum depth exceeded")
 
 // Generator is the type of CSAF document generators
 type Generator struct {
@@ -41,6 +49,10 @@ func (gen *Generator) Generate() (any, error) {
 }
 
 func (gen *Generator) generateNode(typename string, depth int) (any, error) {
+	if depth <= 0 {
+		return nil, ErrDepthExceeded
+	}
+
 	nodeTmpl, ok := gen.Template.Types[typename]
 	if !ok {
 		return nil, fmt.Errorf("unknown type '%s'", typename)
@@ -49,9 +61,6 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 	case *TmplObject:
 		return gen.generateObject(node, depth)
 	case *TmplArray:
-		if depth <= 0 {
-			return []any{}, nil
-		}
 		return gen.randomArray(node, depth)
 	case *TmplOneOf:
 		typename := choose(gen.Rand, node.OneOf)
@@ -116,16 +125,75 @@ func (gen *Generator) randomArray(tmpl *TmplArray, depth int) (any, error) {
 
 func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
 	properties := make(map[string]any)
+	optional := make([]*Property, 0, len(node.Properties))
 	for _, prop := range node.Properties {
-		if gen.Rand.Float32() > prop.Probability {
-			continue
+		switch {
+		case prop.Required:
+			value, err := gen.generateNode(prop.Type, depth-1)
+			if err != nil {
+				return nil, err
+			}
+			properties[prop.Name] = value
+		default:
+			optional = append(optional, prop)
 		}
+	}
+
+	// Choose a value for extraProps, the number of optional properties
+	// to add based on how many we need at least, node.MinProperties,
+	// and how many we may have at most, node.MaxProperties. Both of
+	// those may be -1, which means that there are no explicit limits.
+	// For the lower bound on the number of properties we can just use
+	// the maximum of the number of required properties and
+	// MinProperties, minProps. For the upper bound, we choose
+	// MaxProperties if it is not negative and the total number of known
+	// properties, maxProps. The extra props then, are at least the
+	// number of properties still missing in order to reach minProps and
+	// at most maxProps. If maxProps > minProps we choose a random
+	// number in that range.
+	minProps := max(node.MinProperties, len(properties))
+	maxProps := node.MaxProperties
+	if maxProps < 0 {
+		maxProps = len(node.Properties)
+	}
+	extraProps := minProps - len(properties)
+	if maxProps > minProps {
+		extraProps += gen.Rand.IntN(maxProps - minProps + 1)
+	}
+
+	// generate more properties until we've either generated extraProps
+	// additional properties or we run out of optional properties to
+	// try. Generating a property may fail because the maximum depth
+	// would be exceeded in which case we just try again with a
+	// different property.
+	depthExceeded := false
+	for extraProps > 0 && len(optional) > 0 {
+		i := gen.Rand.IntN(len(optional))
+		prop := optional[i]
+		optional = slices.Delete(optional, i, i+1)
 		value, err := gen.generateNode(prop.Type, depth-1)
-		if err != nil {
+		switch {
+		case errors.Is(err, ErrDepthExceeded):
+			depthExceeded = true
+			continue
+		case err != nil:
 			return nil, err
 		}
 		properties[prop.Name] = value
+		extraProps--
 	}
+
+	// If we failed to generate at least minProps properties, we've
+	// failed to generate a valid object, so we return an error. If the
+	// failure is due to exceeding the maximum depth we report that to
+	// the caller so that it can try something else.
+	if len(properties) < minProps {
+		if depthExceeded {
+			return nil, ErrDepthExceeded
+		}
+		return nil, fmt.Errorf("could not generate at least %d properties", minProps)
+	}
+
 	return properties, nil
 }
 

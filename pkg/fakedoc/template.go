@@ -57,30 +57,61 @@ type TmplNode interface {
 
 // Property describes how to generate one of an object's properties
 type Property struct {
-	Name        string  `toml:"name"`
-	Type        string  `toml:"type"`
-	Probability float32 `toml:"probability"`
+	Name     string `toml:"name"`
+	Type     string `toml:"type"`
+	Required bool   `toml:"required"`
 }
 
 // TmplObject describes a JSON object
 type TmplObject struct {
 	// Properties describes how to generate the object's properties.
 	Properties []*Property `toml:"properties"`
+
+	// MinProperties is the minimum number of properties that the
+	// generated object must have. -1 means no limit.
+	MinProperties int `toml:"minproperties"`
+
+	// MaxProperties is the maximum number of properties that the
+	// generated object must have. -1 means no limit.
+	MaxProperties int `toml:"maxproperties"`
 }
 
 // AsMap implements TmplNode
 func (t *TmplObject) AsMap() map[string]any {
-	return map[string]any{
+	m := map[string]any{
 		"type":       "object",
 		"properties": t.Properties,
 	}
+	if t.MinProperties != -1 {
+		m["minproperties"] = t.MinProperties
+	}
+	if t.MaxProperties != -1 {
+		m["maxproperties"] = t.MaxProperties
+	}
+	return m
 }
 
 // FromToml implemts TmplNode
 func (t *TmplObject) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	t.MinProperties = -1
+	t.MaxProperties = -1
 	if err := md.PrimitiveDecode(primType, t); err != nil {
 		return err
 	}
+	if len(t.Properties) < t.MinProperties {
+		return fmt.Errorf(
+			"%d properties < %d min properties",
+			len(t.Properties), t.MinProperties,
+		)
+	}
+
+	if t.MaxProperties >= 0 && t.MinProperties > t.MaxProperties {
+		return fmt.Errorf(
+			"minproperties %d > maxproperties %d",
+			t.MinProperties, t.MaxProperties,
+		)
+	}
+
 	return nil
 }
 
@@ -278,11 +309,9 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 	}
 	switch ty {
 	case "object":
-		// Preset probabilities for the properties. Required properties
-		// have probability 1
-		probabilities := map[string]float32{}
+		required := make(map[string]bool, len(tschema.Required))
 		for _, name := range tschema.Required {
-			probabilities[name] = 1.0
+			required[name] = true
 		}
 
 		properties := []*Property{}
@@ -290,25 +319,21 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 			if err := t.fromSchema(prop); err != nil {
 				return err
 			}
-			probability, ok := probabilities[propName]
-			if !ok {
-				// The property is not required, so use some value < 1.
-				probability = 0.5
-			}
 			properties = append(properties, &Property{
-				Name:        propName,
-				Type:        ShortLocation(prop),
-				Probability: probability,
+				Name:     propName,
+				Type:     ShortLocation(prop),
+				Required: required[propName],
 			})
 		}
-
 		// Sort properties by name to make the output deterministic
 		slices.SortFunc(properties, func(p1, p2 *Property) int {
 			return cmp.Compare(p1.Name, p2.Name)
 		})
 
 		t.Types[name] = &TmplObject{
-			Properties: properties,
+			Properties:    properties,
+			MinProperties: tschema.MinProperties,
+			MaxProperties: tschema.MaxProperties,
 		}
 	case "array":
 		if err := t.fromSchema(tschema.Items2020); err != nil {
