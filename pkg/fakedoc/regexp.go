@@ -140,7 +140,7 @@ func (s *sampler) chooseCharClass(runes []rune) rune {
 }
 
 func (s *sampler) repeat(re *syntax.Regexp, count int) {
-	for i := 0; i < count; i++ {
+	for range count {
 		s.sampleAstNode(re)
 	}
 }

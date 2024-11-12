@@ -84,7 +84,7 @@ func (gen *Generator) randomString(minlength, maxlength int) string {
 	}
 	length := minlength + gen.Rand.IntN(maxlength-minlength+1)
 	var builder strings.Builder
-	for i := 0; i < length; i++ {
+	for range length {
 		builder.WriteByte(choose(gen.Rand, []byte(chars)))
 	}
 	return builder.String()
@@ -104,7 +104,7 @@ func (gen *Generator) randomArray(tmpl *TmplArray, depth int) (any, error) {
 
 	length := minitems + gen.Rand.IntN(maxitems-minitems+1)
 	items := make([]any, length)
-	for i := 0; i < length; i++ {
+	for i := range length {
 		item, err := gen.generateNode(tmpl.Items, depth-1)
 		if err != nil {
 			return nil, err
