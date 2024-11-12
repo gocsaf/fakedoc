@@ -11,6 +11,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -100,28 +101,21 @@ func trackingIDFromFilename(filename string) (string, error) {
 
 func writeJSON(doc any, outputfile string) error {
 	var out io.Writer = os.Stdout
+	var file *os.File
 	if outputfile != "" {
 		var err error
-		out, err = os.Create(outputfile)
-		if err != nil {
+		if file, err = os.Create(outputfile); err != nil {
 			return err
 		}
+		out = file
 	}
-	b, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
-		return err
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	var err1, err2 error = enc.Encode(doc), nil
+	if file != nil {
+		err2 = file.Close()
 	}
-
-	_, err = out.Write(b)
-	if err != nil {
-		return err
-	}
-	_, err = io.WriteString(out, "\n")
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return errors.Join(err1, err2)
 }
 
 func setValue(doc any, path string, value any) error {
