@@ -124,6 +124,8 @@ type TmplArray struct {
 	MinItems int `toml:"minitems"`
 	// MaxLength is the maximum length of the generated array
 	MaxItems int `toml:"maxitems"`
+
+	UniqueItems bool `toml:"uniqueitems"`
 }
 
 // AsMap implements TmplNode
@@ -137,6 +139,9 @@ func (t *TmplArray) AsMap() map[string]any {
 	}
 	if t.MaxItems != -1 {
 		m["maxitems"] = t.MaxItems
+	}
+	if t.UniqueItems {
+		m["uniqueitems"] = t.UniqueItems
 	}
 	return m
 }
@@ -340,9 +345,10 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 			return err
 		}
 		t.Types[name] = &TmplArray{
-			Items:    ShortLocation(tschema.Items2020),
-			MinItems: tschema.MinItems,
-			MaxItems: tschema.MaxItems,
+			Items:       ShortLocation(tschema.Items2020),
+			MinItems:    tschema.MinItems,
+			MaxItems:    tschema.MaxItems,
+			UniqueItems: tschema.UniqueItems,
 		}
 	case "oneof":
 		oneof := []string{}

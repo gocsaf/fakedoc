@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -23,6 +24,13 @@ import (
 // This is mostly used internally in the generator and is unlikely to be
 // returned from Generate method.
 var ErrDepthExceeded = errors.New("maximum depth exceeded")
+
+// ErrNoValidValue is returned as error by the generator if no value
+// that conforms to the constraints given in the template could be
+// generated. This can happen for arrays where UniqueItems is true, for
+// instance, if the minimum number of items is large compared to number
+// of different valid items.
+var ErrNoValidValue = errors.New("could not generate valid value")
 
 // Generator is the type of CSAF document generators
 type Generator struct {
@@ -112,15 +120,69 @@ func (gen *Generator) randomArray(tmpl *TmplArray, depth int) (any, error) {
 	}
 
 	length := minitems + gen.Rand.IntN(maxitems-minitems+1)
-	items := make([]any, length)
-	for i := range length {
-		item, err := gen.generateNode(tmpl.Items, depth-1)
-		if err != nil {
+	items := make([]any, 0, length)
+	notInItems := func(v any) bool {
+		if !tmpl.UniqueItems {
+			return true
+		}
+		return !slices.ContainsFunc(items, func(item any) bool {
+			return reflect.DeepEqual(item, v)
+		})
+	}
+	for range length {
+		item, err := gen.generateItemUntil(tmpl.Items, 10, depth-1, notInItems)
+		switch {
+		case errors.Is(err, ErrNoValidValue):
+			continue
+		case err != nil:
 			return nil, err
 		}
-		items[i] = item
+		items = append(items, item)
 	}
+
+	if len(items) < minitems {
+		// Should only happen if we could not generate enough unique
+		// elements for the array.
+		return nil, ErrNoValidValue
+	}
+
 	return items, nil
+}
+
+// generateItemUntil repeatedly tries to generate an item of type
+// typename until an item has been generated for which cond returns
+// true. If no such item could be generated in maxAttempts attempts,
+// ErrNoValidValue is returned as error. There may be other errors if
+// generating an item fails for other reasons.
+func (gen *Generator) generateItemUntil(
+	typename string,
+	maxAttempts int,
+	depth int,
+	cond func(any) bool,
+) (any, error) {
+	var (
+		item    any
+		err     error
+		success bool
+	)
+
+generateItem:
+	for range maxAttempts {
+		item, err = gen.generateNode(typename, depth-1)
+		switch {
+		case err != nil:
+			return nil, err
+		case !cond(item):
+			continue
+		default:
+			success = true
+			break generateItem
+		}
+	}
+	if !success {
+		return nil, ErrNoValidValue
+	}
+	return item, nil
 }
 
 func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
