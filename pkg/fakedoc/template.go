@@ -225,10 +225,10 @@ func (t *TmplString) FromToml(md toml.MetaData, primType toml.Primitive) error {
 // TmplNumber describes how to generate numbers
 type TmplNumber struct {
 	// Minimum is the minum value of the generated numbers
-	Minimum *float32
+	Minimum *float32 `toml:"minimum"`
 
 	// Maximum is the maximum value of the generated numbers
-	Maximum *float32
+	Maximum *float32 `toml:"maximum"`
 }
 
 // AsMap implements TmplNode
@@ -256,10 +256,10 @@ func (t *TmplNumber) FromToml(md toml.MetaData, primType toml.Primitive) error {
 // TmplDateTime describes how to generate date/time values
 type TmplDateTime struct {
 	// Minimum is the minum value of the generated date/time values
-	Minimum *time.Time
+	Minimum *time.Time `toml:"minimum"`
 
 	// Maximum is the maximum value of the generated  date/time values
-	Maximum *time.Time
+	Maximum *time.Time `toml:"maximum"`
 }
 
 // AsMap implements TmplNode
