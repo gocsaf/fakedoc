@@ -27,7 +27,7 @@ go run cmd/createtemplate/main.go  > template.toml
 Use the template to generate a document. The document is written to stdout
 
 ``` go
-go run cmd/fakedoc/main.go --template template.toml
+go run cmd/fakedoc/main.go --template template.toml -o random-csaf.json
 ```
 
 See the [template documentation](docs/templates.md) for details about
