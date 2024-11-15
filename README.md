@@ -30,6 +30,9 @@ Use the template to generate a document. The document is written to stdout
 go run cmd/fakedoc/main.go --template template.toml
 ```
 
+See the [template documentation](docs/templates.md) for details about
+the templates.
+
 ## License
 
 fakedoc is Free Software:
