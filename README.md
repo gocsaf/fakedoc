@@ -20,13 +20,13 @@ Will use the CSAF Go library where appropriate.
 
 Create a template with
 
-``` go
+``` shell
 go run cmd/createtemplate/main.go  > template.toml
 ```
 
 Use the template to generate a document. The document is written to stdout
 
-``` go
+``` shell
 go run cmd/fakedoc/main.go --template template.toml -o random-csaf.json
 ```
 
