@@ -10,6 +10,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -20,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	"github.com/gocsaf/fakedoc/pkg/fakedoc"
 )
@@ -35,6 +37,12 @@ output filename. Setting this will also set the tracking ID in the
 generated file so that it matches the filename. The filename must end
 with '.json'
 `
+
+	numOutputDocumentation = `
+How many documents to generate . If greate than 1, the output filename
+must be given. It is treated as a template for filenames in which {{$}}
+will be replaced with the number of the file, starting with 0.
+`
 )
 
 func main() {
@@ -42,12 +50,18 @@ func main() {
 		templatefile string
 		seed         string
 		outputfile   string
+		numOutputs   int
 	)
 
 	flag.StringVar(&templatefile, "template", "template.toml", "template file")
 	flag.StringVar(&seed, "seed", "", seedDocumentation)
 	flag.StringVar(&outputfile, "o", "", outputDocumentation)
+	flag.IntVar(&numOutputs, "n", 1, numOutputDocumentation)
 	flag.Parse()
+
+	if numOutputs > 1 && outputfile == "" {
+		log.Fatal("Multiple outputs require an explicit output file template")
+	}
 
 	var (
 		rng *rand.Rand
@@ -60,13 +74,13 @@ func main() {
 		}
 	}
 
-	err = generate(templatefile, rng, outputfile)
+	err = generate(templatefile, rng, outputfile, numOutputs)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func generate(templatefile string, rng *rand.Rand, outputfile string) error {
+func generate(templatefile string, rng *rand.Rand, outputfile string, numOutputs int) error {
 	templ, err := fakedoc.FromCSAFSchema()
 	if err != nil {
 		return err
@@ -81,11 +95,45 @@ func generate(templatefile string, rng *rand.Rand, outputfile string) error {
 	}
 
 	generator := fakedoc.NewGenerator(templ, rng)
-	csaf, err := generator.Generate()
+
+	if numOutputs == 1 {
+		return generateToFile(generator, outputfile)
+	}
+
+	tmplFilename, err := template.New("filename").Parse(outputfile)
 	if err != nil {
 		return err
 	}
 
+	for n := range numOutputs {
+		filename, err := makeFilename(tmplFilename, n)
+		if err != nil {
+			return err
+		}
+		err = generateToFile(generator, filename)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func makeFilename(tmpl *template.Template, n int) (string, error) {
+	var filename bytes.Buffer
+
+	err := tmpl.Execute(&filename, n)
+	if err != nil {
+		return "", err
+	}
+	return filename.String(), nil
+}
+
+func generateToFile(generator *fakedoc.Generator, outputfile string) error {
+	csaf, err := generator.Generate()
+	if err != nil {
+		return err
+	}
 	if outputfile != "" {
 		id, err := trackingIDFromFilename(outputfile)
 		if err != nil {
