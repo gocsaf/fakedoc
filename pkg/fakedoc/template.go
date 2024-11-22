@@ -284,6 +284,17 @@ func (t *TmplDateTime) FromToml(md toml.MetaData, primType toml.Primitive) error
 	return nil
 }
 
+// FromCSAFSchema creates a new template from the built-in CSAF JSON
+// schema
+func FromCSAFSchema() (*Template, error) {
+	schema, err := CompileSchema()
+	if err != nil {
+		return nil, err
+	}
+
+	return FromSchema(schema)
+}
+
 // FromSchema creates a default template from a JSON schema.
 func FromSchema(schema *jsonschema.Schema) (*Template, error) {
 	template := &Template{

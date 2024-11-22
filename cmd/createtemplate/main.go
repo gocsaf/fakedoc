@@ -25,12 +25,7 @@ func main() {
 }
 
 func createTemplate() error {
-	schema, err := fakedoc.CompileSchema()
-	if err != nil {
-		return err
-	}
-
-	template, err := fakedoc.FromSchema(schema)
+	template, err := fakedoc.FromCSAFSchema()
 	if err != nil {
 		return err
 	}
