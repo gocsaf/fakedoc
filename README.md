@@ -18,20 +18,30 @@ Will use the CSAF Go library where appropriate.
 
 ## Usage
 
-Create a template with
+Generate a random CSAF document with default settings (with the `-o`
+option for the output file, the tracking ID will match the filename):
+
+``` shell
+go run cmd/fakedoc/main.go -o random-csaf.json
+```
+
+The generator can be influenced with a template. Create a template
+containing all of the settings used by fakedoc with
 
 ``` shell
 go run cmd/createtemplate/main.go  > template.toml
 ```
 
-Use the template to generate a document. The document is written to stdout
+Use the template to generate a document:
 
 ``` shell
 go run cmd/fakedoc/main.go --template template.toml -o random-csaf.json
 ```
 
-See the [template documentation](docs/templates.md) for details about
-the templates.
+The template file is used in addition to the built-in template used when
+the --template option is not given. See the
+[template documentation](docs/templates.md) for details about the
+templates.
 
 ## License
 

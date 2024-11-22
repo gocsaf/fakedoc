@@ -67,9 +67,17 @@ func main() {
 }
 
 func generate(templatefile string, rng *rand.Rand, outputfile string) error {
-	templ, err := fakedoc.LoadTemplate(templatefile)
+	templ, err := fakedoc.FromCSAFSchema()
 	if err != nil {
 		return err
+	}
+
+	if templatefile != "" {
+		overrides, err := fakedoc.LoadTemplate(templatefile)
+		if err != nil {
+			return err
+		}
+		templ.Merge(overrides)
 	}
 
 	generator := fakedoc.NewGenerator(templ, rng)

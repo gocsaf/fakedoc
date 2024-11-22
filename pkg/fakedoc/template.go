@@ -45,6 +45,13 @@ func (t *Template) Write(out io.Writer) error {
 	return toml.NewEncoder(out).Encode(m)
 }
 
+// Merge adds the types of another template.
+func (t *Template) Merge(other *Template) {
+	for name, ty := range other.Types {
+		t.Types[name] = ty
+	}
+}
+
 // TmplNode is the interface for template nodes.
 type TmplNode interface {
 	// AsMap returns a map describing the node for the TOML file
