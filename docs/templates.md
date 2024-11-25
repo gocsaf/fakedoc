@@ -245,3 +245,29 @@ ISO format.
     minimum = 2020-01-01T00:00:00Z
     type = "date-time"
 ```
+
+
+#### `lorem`
+
+The `lorem` kind describes a JSON string containing "lorem ipsum" style
+filler text. This is particularly useful for the parts of a CSAF
+document that contain prose text.
+
+##### Attributes
+
+ * `unit`: String with one of the values "words", "sentences" or
+   "paragraphs". This roughly controls how much text is generated and
+   whether its split into paragraphs. Paragraphs are separated by
+   newline characters.
+ * `minlength`: Minimum length in units
+ * `maxlength`: Maximum length in units
+
+
+##### Example
+
+``` toml
+  [types."csaf:#/properties/vulnerabilities/items/properties/threats/items/properties/details"]
+    minlength = 2
+    unit = "sentences"
+    type = "lorem"
+```

@@ -17,6 +17,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/go-loremipsum/loremipsum"
 )
 
 // ErrDepthExceeded is returned as error by the generator if exceeding
@@ -81,6 +83,8 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 			return node.Pattern.Sample(gen.Rand), nil
 		}
 		return gen.randomString(node.MinLength, node.MaxLength), nil
+	case *TmplLorem:
+		return gen.loremIpsum(node.MinLength, node.MaxLength, node.Unit), nil
 	case *TmplNumber:
 		return gen.randomNumber(node.Minimum, node.Maximum), nil
 	case *TmplDateTime:
@@ -288,4 +292,26 @@ func (gen *Generator) randomDateTime(mindate, maxdate *time.Time) time.Time {
 	duration := maxdate.Sub(*mindate)
 
 	return mindate.Add(time.Duration(gen.Rand.Float64() * float64(duration)))
+}
+
+func (gen *Generator) loremIpsum(minlength, maxlength int, unit LoremUnit) string {
+	if minlength < 0 {
+		minlength = 0
+	}
+	if maxlength < 0 {
+		// FIXME: make bound on maximum length configurable
+		maxlength = minlength + 10
+	}
+
+	length := minlength + gen.Rand.IntN(maxlength-minlength)
+
+	lorem := loremipsum.NewWithSeed(gen.Rand.Int64())
+	switch unit {
+	case LoremSentences:
+		return lorem.Sentences(length)
+	case LoremParagraphs:
+		return lorem.Paragraphs(length)
+	default:
+		return lorem.Words(length)
+	}
 }

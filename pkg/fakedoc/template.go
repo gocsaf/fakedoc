@@ -229,6 +229,53 @@ func (t *TmplString) FromToml(md toml.MetaData, primType toml.Primitive) error {
 	return nil
 }
 
+// TmplLorem describes how to generate strings
+type TmplLorem struct {
+	// MinLength is the minimum length of the generated strings
+	MinLength int `toml:"minlength"`
+	// MaxLength is the maximum length of the generated strings
+	MaxLength int `toml:"maxlength"`
+	// Unit for max/min length. Can be "words", "sentences" or
+	// "paragraphs". Default is "words"
+	Unit LoremUnit
+}
+
+type LoremUnit string
+
+const (
+	LoremWords      LoremUnit = "words"
+	LoremSentences  LoremUnit = "sentences"
+	LoremParagraphs LoremUnit = "paragraphs"
+)
+
+// AsMap implements TmplNode
+func (t *TmplLorem) AsMap() map[string]any {
+	m := map[string]any{
+		"type": "lorem",
+	}
+	if t.MinLength != -1 {
+		m["minlength"] = t.MinLength
+	}
+	if t.MaxLength != -1 {
+		m["maxlength"] = t.MaxLength
+	}
+	if t.Unit != LoremWords {
+		m["unit"] = t.Unit
+	}
+	return m
+}
+
+// FromToml implemts TmplNode
+func (t *TmplLorem) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	t.MinLength = -1
+	t.MaxLength = -1
+	t.Unit = LoremWords
+	if err := md.PrimitiveDecode(primType, t); err != nil {
+		return err
+	}
+	return nil
+}
+
 // TmplNumber describes how to generate numbers
 type TmplNumber struct {
 	// Minimum is the minum value of the generated numbers
@@ -403,6 +450,7 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 					return nil
 				}
 			}
+
 			t.Types[name] = &TmplString{
 				MinLength: tschema.MinLength,
 				MaxLength: tschema.MaxLength,
@@ -508,6 +556,8 @@ func decodeType(md toml.MetaData, primType toml.Primitive) (TmplNode, error) {
 	switch typename {
 	case "string":
 		node = new(TmplString)
+	case "lorem":
+		node = new(TmplLorem)
 	case "number":
 		node = new(TmplNumber)
 	case "date-time":
