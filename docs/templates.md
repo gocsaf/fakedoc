@@ -115,7 +115,7 @@ Each property has the following attributes:
 
 #### `array`
 
-The `object` kind describes a JSON array
+The `array` kind describes a JSON array
 
 ##### Attributes
 
