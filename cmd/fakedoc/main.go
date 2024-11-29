@@ -53,7 +53,7 @@ func main() {
 		numOutputs   int
 	)
 
-	flag.StringVar(&templatefile, "template", "template.toml", "template file")
+	flag.StringVar(&templatefile, "template", "", "template file")
 	flag.StringVar(&seed, "seed", "", seedDocumentation)
 	flag.StringVar(&outputfile, "o", "", outputDocumentation)
 	flag.IntVar(&numOutputs, "n", 1, numOutputDocumentation)
