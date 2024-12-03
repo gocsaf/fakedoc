@@ -45,7 +45,7 @@ templates.
 
 Generate many documents at once with the `-n` option and an output
 filename with a template for filenames. This will generate 100 documents
-named `csaf-000.json` through `csaf-99.json`:
+named `csaf-0.json` through `csaf-99.json`:
 
 ``` shell
 go run cmd/fakedoc/main.go --template template.toml -n 100 -o 'csaf-{{$}}.json'
