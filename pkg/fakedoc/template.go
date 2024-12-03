@@ -240,11 +240,15 @@ type TmplLorem struct {
 	Unit LoremUnit
 }
 
+// LoremUnit represents the granularity of the lorem ipsum generator
 type LoremUnit string
 
 const (
-	LoremWords      LoremUnit = "words"
-	LoremSentences  LoremUnit = "sentences"
+	// LoremWords indicates that a bunch of words should be generated
+	LoremWords LoremUnit = "words"
+	// LoremSentences indicates that full sentences should be generated
+	LoremSentences LoremUnit = "sentences"
+	// LoremParagraphs indicates that complete paragraphs should be generated
 	LoremParagraphs LoremUnit = "paragraphs"
 )
 
