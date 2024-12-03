@@ -11,8 +11,10 @@ package fakedoc
 import (
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"math/rand/v2"
+	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -85,6 +87,8 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 		return gen.randomString(node.MinLength, node.MaxLength), nil
 	case *TmplLorem:
 		return gen.loremIpsum(node.MinLength, node.MaxLength, node.Unit), nil
+	case *TmplBook:
+		return gen.book(node.MinLength, node.MaxLength, node.Path)
 	case *TmplNumber:
 		return gen.randomNumber(node.Minimum, node.Maximum), nil
 	case *TmplDateTime:
@@ -314,4 +318,26 @@ func (gen *Generator) loremIpsum(minlength, maxlength int, unit LoremUnit) strin
 	default:
 		return lorem.Words(length)
 	}
+}
+
+func (gen *Generator) book(minlength, maxlength int, path string) (string, error) {
+	if minlength < 0 {
+		minlength = 0
+	}
+	if maxlength < 0 {
+		// FIXME: make bound on maximum length configurable
+		maxlength = minlength + 10
+	}
+
+	length := minlength + gen.Rand.IntN(maxlength-minlength)
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return "", err
+	}
+	return string(content[:length]), nil
 }
