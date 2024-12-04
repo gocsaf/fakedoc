@@ -19,6 +19,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-loremipsum/loremipsum"
 )
@@ -36,11 +37,16 @@ var ErrDepthExceeded = errors.New("maximum depth exceeded")
 // of different valid items.
 var ErrNoValidValue = errors.New("could not generate valid value")
 
+// ErrInvalidString is returned as error by the generator if the input
+// text is not valid UTF-8. This can happen if the input is a binary
+// file not a text document.
+var ErrInvalidString = errors.New("not valid utf-8")
+
 // Generator is the type of CSAF document generators
 type Generator struct {
 	Template  *Template
 	Rand      *rand.Rand
-	FileCache map[string][]byte
+	FileCache map[string]string
 }
 
 // NewGenerator creates a new Generator based on a Template and an
@@ -53,7 +59,7 @@ func NewGenerator(tmpl *Template, rng *rand.Rand) *Generator {
 	return &Generator{
 		Template:  tmpl,
 		Rand:      rng,
-		FileCache: make(map[string][]byte),
+		FileCache: make(map[string]string),
 	}
 }
 
@@ -339,12 +345,22 @@ func (gen *Generator) book(minlength, maxlength int, path string) (string, error
 			return "", err
 		}
 		defer file.Close()
-		content, err = io.ReadAll(file)
+		byteContent, err := io.ReadAll(file)
 		if err != nil {
 			return "", err
+		}
+		content = string(byteContent)
+		if !utf8.ValidString(content) {
+			return "", ErrInvalidString
 		}
 		gen.FileCache[path] = content
 	}
 
-	return string(content[:length]), nil
+	// Correctly trim by UTF-8 runes
+	trimmed := []rune(content)
+	if len(trimmed) < length {
+		length = len(trimmed)
+	}
+	trimmed = trimmed[:length]
+	return string(trimmed), nil
 }
