@@ -47,11 +47,22 @@ will be replaced with the number of the file, starting with 0.
 	formattedDocumentation = `
 Output JSON should be formatted.
 `
+
+	limitsDocumentation = `
+Guidance on the Size of CSAF Documents.
+`
 )
+
+func check(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 
 func main() {
 	var (
 		templatefile string
+		limitsfile   string
 		seed         string
 		outputfile   string
 		numOutputs   int
@@ -59,6 +70,7 @@ func main() {
 	)
 
 	flag.StringVar(&templatefile, "template", "", "template file")
+	flag.StringVar(&limitsfile, "l", "", limitsDocumentation)
 	flag.StringVar(&seed, "seed", "", seedDocumentation)
 	flag.StringVar(&outputfile, "o", "", outputDocumentation)
 	flag.IntVar(&numOutputs, "n", 1, numOutputDocumentation)
@@ -75,21 +87,19 @@ func main() {
 	)
 	if seed != "" {
 		rng, err = fakedoc.ParseSeed(seed)
-		if err != nil {
-			log.Fatal(err)
-		}
+		check(err)
 	}
 
-	err = generate(templatefile, rng, outputfile, numOutputs, formatted)
-	if err != nil {
-		log.Fatal(err)
-	}
+	check(generate(
+		templatefile, rng,
+		outputfile, limitsfile,
+		numOutputs, formatted))
 }
 
 func generate(
 	templatefile string,
 	rng *rand.Rand,
-	outputfile string,
+	outputfile, limitsfile string,
 	numOutputs int,
 	formatted bool,
 ) error {
@@ -106,7 +116,14 @@ func generate(
 		templ.Merge(overrides)
 	}
 
-	generator := fakedoc.NewGenerator(templ, rng)
+	var limits *fakedoc.Limits
+	if limitsfile != "" {
+		if limits, err = fakedoc.LoadLimitsFromFile(limitsfile); err != nil {
+			return err
+		}
+	}
+
+	generator := fakedoc.NewGenerator(templ, limits, rng)
 
 	if numOutputs == 1 {
 		return generateToFile(generator, outputfile, formatted)
