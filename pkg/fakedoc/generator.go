@@ -38,8 +38,9 @@ var ErrNoValidValue = errors.New("could not generate valid value")
 
 // Generator is the type of CSAF document generators
 type Generator struct {
-	Template *Template
-	Rand     *rand.Rand
+	Template  *Template
+	Rand      *rand.Rand
+	FileCache map[string][]byte
 }
 
 // NewGenerator creates a new Generator based on a Template and an
@@ -50,8 +51,9 @@ func NewGenerator(tmpl *Template, rng *rand.Rand) *Generator {
 		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	}
 	return &Generator{
-		Template: tmpl,
-		Rand:     rng,
+		Template:  tmpl,
+		Rand:      rng,
+		FileCache: make(map[string][]byte),
 	}
 }
 
@@ -330,14 +332,19 @@ func (gen *Generator) book(minlength, maxlength int, path string) (string, error
 	}
 
 	length := minlength + gen.Rand.IntN(maxlength-minlength)
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
+	content, ok := gen.FileCache[path]
+	if !ok {
+		file, err := os.Open(path)
+		if err != nil {
+			return "", err
+		}
+		defer file.Close()
+		content, err = io.ReadAll(file)
+		if err != nil {
+			return "", err
+		}
+		gen.FileCache[path] = content
 	}
-	defer file.Close()
-	content, err := io.ReadAll(file)
-	if err != nil {
-		return "", err
-	}
+
 	return string(content[:length]), nil
 }
