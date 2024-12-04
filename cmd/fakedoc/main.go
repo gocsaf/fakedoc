@@ -44,9 +44,8 @@ must be given. It is treated as a template for filenames in which {{$}}
 will be replaced with the number of the file, starting with 0.
 `
 
-	indentLengthDocumentation = `
-How many spaces are used for indentation of the output file.
-If omitted, the default value of 2 spaces is used.
+	formattedDocumentation = `
+Output JSON should be formatted.
 `
 )
 
@@ -56,14 +55,14 @@ func main() {
 		seed         string
 		outputfile   string
 		numOutputs   int
-		indentLength int
+		formatted    bool
 	)
 
 	flag.StringVar(&templatefile, "template", "", "template file")
 	flag.StringVar(&seed, "seed", "", seedDocumentation)
 	flag.StringVar(&outputfile, "o", "", outputDocumentation)
 	flag.IntVar(&numOutputs, "n", 1, numOutputDocumentation)
-	flag.IntVar(&indentLength, "i", 2, indentLengthDocumentation)
+	flag.BoolVar(&formatted, "f", false, formattedDocumentation)
 	flag.Parse()
 
 	if numOutputs > 1 && outputfile == "" {
@@ -81,13 +80,19 @@ func main() {
 		}
 	}
 
-	err = generate(templatefile, rng, outputfile, numOutputs, indentLength)
+	err = generate(templatefile, rng, outputfile, numOutputs, formatted)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func generate(templatefile string, rng *rand.Rand, outputfile string, numOutputs int, indentLength int) error {
+func generate(
+	templatefile string,
+	rng *rand.Rand,
+	outputfile string,
+	numOutputs int,
+	formatted bool,
+) error {
 	templ, err := fakedoc.FromCSAFSchema()
 	if err != nil {
 		return err
@@ -104,7 +109,7 @@ func generate(templatefile string, rng *rand.Rand, outputfile string, numOutputs
 	generator := fakedoc.NewGenerator(templ, rng)
 
 	if numOutputs == 1 {
-		return generateToFile(generator, outputfile, indentLength)
+		return generateToFile(generator, outputfile, formatted)
 	}
 
 	tmplFilename, err := template.New("filename").Parse(outputfile)
@@ -117,7 +122,7 @@ func generate(templatefile string, rng *rand.Rand, outputfile string, numOutputs
 		if err != nil {
 			return err
 		}
-		err = generateToFile(generator, filename, indentLength)
+		err = generateToFile(generator, filename, formatted)
 		if err != nil {
 			return err
 		}
@@ -136,7 +141,11 @@ func makeFilename(tmpl *template.Template, n int) (string, error) {
 	return filename.String(), nil
 }
 
-func generateToFile(generator *fakedoc.Generator, outputfile string, indentLength int) error {
+func generateToFile(
+	generator *fakedoc.Generator,
+	outputfile string,
+	formatted bool,
+) error {
 	csaf, err := generator.Generate()
 	if err != nil {
 		return err
@@ -150,7 +159,7 @@ func generateToFile(generator *fakedoc.Generator, outputfile string, indentLengt
 			return fmt.Errorf("setting tracking ID: %w", err)
 		}
 	}
-	return writeJSON(csaf, outputfile, indentLength)
+	return writeJSON(csaf, outputfile, formatted)
 }
 
 func trackingIDFromFilename(filename string) (string, error) {
@@ -162,7 +171,7 @@ func trackingIDFromFilename(filename string) (string, error) {
 	return id, nil
 }
 
-func writeJSON(doc any, outputfile string, indentLength int) error {
+func writeJSON(doc any, outputfile string, formatted bool) error {
 	var out io.Writer = os.Stdout
 	var file *os.File
 	if outputfile != "" {
@@ -173,8 +182,9 @@ func writeJSON(doc any, outputfile string, indentLength int) error {
 		out = file
 	}
 	enc := json.NewEncoder(out)
-	indent := strings.Repeat(" ", indentLength)
-	enc.SetIndent("", indent)
+	if formatted {
+		enc.SetIndent("", "  ")
+	}
 	var err1, err2 error = enc.Encode(doc), nil
 	if file != nil {
 		err2 = file.Close()
