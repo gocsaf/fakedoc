@@ -11,12 +11,15 @@ package fakedoc
 import (
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"math/rand/v2"
+	"os"
 	"reflect"
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-loremipsum/loremipsum"
 )
@@ -34,10 +37,16 @@ var ErrDepthExceeded = errors.New("maximum depth exceeded")
 // of different valid items.
 var ErrNoValidValue = errors.New("could not generate valid value")
 
+// ErrInvalidString is returned as error by the generator if the input
+// text is not valid UTF-8. This can happen if the input is a binary
+// file not a text document.
+var ErrInvalidString = errors.New("not valid utf-8")
+
 // Generator is the type of CSAF document generators
 type Generator struct {
-	Template *Template
-	Rand     *rand.Rand
+	Template  *Template
+	Rand      *rand.Rand
+	FileCache map[string]string
 }
 
 // NewGenerator creates a new Generator based on a Template and an
@@ -48,8 +57,9 @@ func NewGenerator(tmpl *Template, rng *rand.Rand) *Generator {
 		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	}
 	return &Generator{
-		Template: tmpl,
-		Rand:     rng,
+		Template:  tmpl,
+		Rand:      rng,
+		FileCache: make(map[string]string),
 	}
 }
 
@@ -85,6 +95,8 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 		return gen.randomString(node.MinLength, node.MaxLength), nil
 	case *TmplLorem:
 		return gen.loremIpsum(node.MinLength, node.MaxLength, node.Unit), nil
+	case *TmplBook:
+		return gen.book(node.MinLength, node.MaxLength, node.Path)
 	case *TmplNumber:
 		return gen.randomNumber(node.Minimum, node.Maximum), nil
 	case *TmplDateTime:
@@ -314,4 +326,41 @@ func (gen *Generator) loremIpsum(minlength, maxlength int, unit LoremUnit) strin
 	default:
 		return lorem.Words(length)
 	}
+}
+
+func (gen *Generator) book(minlength, maxlength int, path string) (string, error) {
+	if minlength < 0 {
+		minlength = 0
+	}
+	if maxlength < 0 {
+		// FIXME: make bound on maximum length configurable
+		maxlength = minlength + 10
+	}
+
+	length := minlength + gen.Rand.IntN(maxlength-minlength)
+	content, ok := gen.FileCache[path]
+	if !ok {
+		file, err := os.Open(path)
+		if err != nil {
+			return "", err
+		}
+		defer file.Close()
+		byteContent, err := io.ReadAll(file)
+		if err != nil {
+			return "", err
+		}
+		content = string(byteContent)
+		if !utf8.ValidString(content) {
+			return "", ErrInvalidString
+		}
+		gen.FileCache[path] = content
+	}
+
+	// Correctly trim by UTF-8 runes
+	trimmed := []rune(content)
+	if len(trimmed) < length {
+		length = len(trimmed)
+	}
+	trimmed = trimmed[:length]
+	return string(trimmed), nil
 }
