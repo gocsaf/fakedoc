@@ -24,11 +24,18 @@ import (
 	"github.com/go-loremipsum/loremipsum"
 )
 
+// ErrBranchAbandoned is the base errors that indicate that the
+// generator should abandon a recursive descent and try again with a
+// different branch.
+//
+// This error is mostly used internally in the generator and is unlikely
+// to be returned from Generate method.
+var ErrBranchAbandoned = errors.New("branch abandoned")
+
 // ErrDepthExceeded is returned as error by the generator if exceeding
 // the maximum depth of the generated document could not be avoided.
-// This is mostly used internally in the generator and is unlikely to be
-// returned from Generate method.
-var ErrDepthExceeded = errors.New("maximum depth exceeded")
+// It is based on ErrBranchAbandoned
+var ErrDepthExceeded = fmt.Errorf("%w: maximum depth exceeded", ErrBranchAbandoned)
 
 // ErrNoValidValue is returned as error by the generator if no value
 // that conforms to the constraints given in the template could be
@@ -83,8 +90,7 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 	case *TmplArray:
 		return gen.randomArray(node, depth)
 	case *TmplOneOf:
-		typename := choose(gen.Rand, node.OneOf)
-		return gen.generateNode(typename, depth-1)
+		return gen.randomOneOf(node.OneOf, depth)
 	case *TmplString:
 		if len(node.Enum) > 0 {
 			return choose(gen.Rand, node.Enum), nil
@@ -201,6 +207,24 @@ generateItem:
 	return item, nil
 }
 
+func (gen *Generator) randomOneOf(oneof []string, depth int) (any, error) {
+	shuffled := shuffle(gen.Rand, oneof)
+	var abandoned error
+	for _, typename := range shuffled {
+		value, err := gen.generateNode(typename, depth-1)
+		if errors.Is(err, ErrBranchAbandoned) {
+			abandoned = err
+			continue
+		}
+		return value, err
+	}
+
+	if abandoned != nil {
+		return nil, abandoned
+	}
+	return nil, fmt.Errorf("could not generate any of %v", oneof)
+}
+
 func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
 	properties := make(map[string]any)
 	optional := make([]*Property, 0, len(node.Properties))
@@ -244,15 +268,15 @@ func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
 	// try. Generating a property may fail because the maximum depth
 	// would be exceeded in which case we just try again with a
 	// different property.
-	depthExceeded := false
+	var branchAbandoned error
 	for extraProps > 0 && len(optional) > 0 {
 		i := gen.Rand.IntN(len(optional))
 		prop := optional[i]
 		optional = slices.Delete(optional, i, i+1)
 		value, err := gen.generateNode(prop.Type, depth-1)
 		switch {
-		case errors.Is(err, ErrDepthExceeded):
-			depthExceeded = true
+		case errors.Is(err, ErrBranchAbandoned):
+			branchAbandoned = err
 			continue
 		case err != nil:
 			return nil, err
@@ -266,8 +290,8 @@ func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
 	// failure is due to exceeding the maximum depth we report that to
 	// the caller so that it can try something else.
 	if len(properties) < minProps {
-		if depthExceeded {
-			return nil, ErrDepthExceeded
+		if branchAbandoned != nil {
+			return nil, branchAbandoned
 		}
 		return nil, fmt.Errorf("could not generate at least %d properties", minProps)
 	}

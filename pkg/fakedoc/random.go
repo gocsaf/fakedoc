@@ -21,6 +21,14 @@ func choose[T any](rand *rand.Rand, choices []T) T {
 	return choices[rand.IntN(len(choices))]
 }
 
+// shuffle randomly shuffles a slice
+func shuffle[T any](rand *rand.Rand, ts []T) []T {
+	rand.Shuffle(len(ts), func(i, j int) {
+		ts[i], ts[j] = ts[j], ts[i]
+	})
+	return ts
+}
+
 // ErrSeedFormat is the error returned by ParseSeed for incorrectly
 // formatted seed values.
 var ErrSeedFormat = errors.New(
