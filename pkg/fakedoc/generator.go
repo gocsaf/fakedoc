@@ -42,7 +42,8 @@ var ErrDepthExceeded = fmt.Errorf("%w: maximum depth exceeded", ErrBranchAbandon
 // generated. This can happen for arrays where UniqueItems is true, for
 // instance, if the minimum number of items is large compared to number
 // of different valid items.
-var ErrNoValidValue = errors.New("could not generate valid value")
+// It is based on ErrBranchAbandoned
+var ErrNoValidValue = fmt.Errorf("%w: could not generate valid value", ErrBranchAbandoned)
 
 // ErrInvalidString is returned as error by the generator if the input
 // text is not valid UTF-8. This can happen if the input is a binary
