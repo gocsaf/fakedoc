@@ -395,15 +395,17 @@ func FromCSAFSchema() (*Template, error) {
 func FromSchema(schema *jsonschema.Schema) (*Template, error) {
 	template := &Template{
 		Types: make(map[string]TmplNode),
-		Root:  ShortLocation(schema),
+		Root:  "",
 	}
-	if err := template.fromSchema(schema); err != nil {
+	root, err := template.fromSchema(schema)
+	if err != nil {
 		return nil, err
 	}
+	template.Root = root
 	return template, nil
 }
 
-func (t *Template) fromSchema(schema *jsonschema.Schema) error {
+func (t *Template) fromSchema(schema *jsonschema.Schema) (string, error) {
 	name := ShortLocation(schema)
 
 	// Check for recursion. If name is already in t.Types, we don't have
@@ -411,13 +413,13 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 	// building the node, otherwise the node has already been
 	// contstructed.
 	if _, ok := t.Types[name]; ok {
-		return nil
+		return name, nil
 	}
 	t.Types[name] = nil
 
 	ty, tschema, err := getType(schema)
 	if err != nil {
-		return err
+		return "", err
 	}
 	switch ty {
 	case "object":
@@ -428,12 +430,13 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 
 		properties := []*Property{}
 		for propName, prop := range tschema.Properties {
-			if err := t.fromSchema(prop); err != nil {
-				return err
+			propType, err := t.fromSchema(prop)
+			if err != nil {
+				return "", err
 			}
 			properties = append(properties, &Property{
 				Name:     propName,
-				Type:     ShortLocation(prop),
+				Type:     propType,
 				Required: required[propName],
 			})
 		}
@@ -448,11 +451,12 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 			MaxProperties: tschema.MaxProperties,
 		}
 	case "array":
-		if err := t.fromSchema(tschema.Items2020); err != nil {
-			return err
+		itemsType, err := t.fromSchema(tschema.Items2020)
+		if err != nil {
+			return "", err
 		}
 		t.Types[name] = &TmplArray{
-			Items:       ShortLocation(tschema.Items2020),
+			Items:       itemsType,
 			MinItems:    tschema.MinItems,
 			MaxItems:    tschema.MaxItems,
 			UniqueItems: tschema.UniqueItems,
@@ -460,10 +464,11 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 	case "oneof":
 		oneof := []string{}
 		for _, alternative := range tschema.OneOf {
-			if err := t.fromSchema(alternative); err != nil {
-				return err
+			altType, err := t.fromSchema(alternative)
+			if err != nil {
+				return "", err
 			}
-			oneof = append(oneof, ShortLocation(alternative))
+			oneof = append(oneof, altType)
 		}
 		t.Types[name] = &TmplOneOf{OneOf: oneof}
 	case "string":
@@ -489,7 +494,7 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 			if regexp != "" {
 				pattern, err = CompileRegexp(regexp)
 				if err != nil {
-					return nil
+					return "", err
 				}
 			}
 
@@ -515,9 +520,9 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 			Maximum: maximum,
 		}
 	default:
-		return fmt.Errorf("unexpected type: %s", ty)
+		return "", fmt.Errorf("unexpected type: %s", ty)
 	}
-	return nil
+	return name, nil
 }
 
 func getType(schema *jsonschema.Schema) (string, *jsonschema.Schema, error) {
