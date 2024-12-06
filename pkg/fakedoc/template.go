@@ -405,31 +405,32 @@ func FromSchema(schema *jsonschema.Schema) (*Template, error) {
 	return template, nil
 }
 
-func (t *Template) fromSchema(schema *jsonschema.Schema) (string, error) {
+func (t *Template) fromSchema(origschema *jsonschema.Schema) (string, error) {
+	ty, schema, err := getType(origschema)
+	if err != nil {
+		return "", err
+	}
+
 	name := ShortLocation(schema)
 
 	// Check for recursion. If name is already in t.Types, we don't have
 	// to do anything. If the associated value is nil, we're currently
 	// building the node, otherwise the node has already been
-	// contstructed.
+	// constructed.
 	if _, ok := t.Types[name]; ok {
 		return name, nil
 	}
 	t.Types[name] = nil
 
-	ty, tschema, err := getType(schema)
-	if err != nil {
-		return "", err
-	}
 	switch ty {
 	case "object":
-		required := make(map[string]bool, len(tschema.Required))
-		for _, name := range tschema.Required {
+		required := make(map[string]bool, len(schema.Required))
+		for _, name := range schema.Required {
 			required[name] = true
 		}
 
 		properties := []*Property{}
-		for propName, prop := range tschema.Properties {
+		for propName, prop := range schema.Properties {
 			propType, err := t.fromSchema(prop)
 			if err != nil {
 				return "", err
@@ -447,23 +448,23 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) (string, error) {
 
 		t.Types[name] = &TmplObject{
 			Properties:    properties,
-			MinProperties: tschema.MinProperties,
-			MaxProperties: tschema.MaxProperties,
+			MinProperties: schema.MinProperties,
+			MaxProperties: schema.MaxProperties,
 		}
 	case "array":
-		itemsType, err := t.fromSchema(tschema.Items2020)
+		itemsType, err := t.fromSchema(schema.Items2020)
 		if err != nil {
 			return "", err
 		}
 		t.Types[name] = &TmplArray{
 			Items:       itemsType,
-			MinItems:    tschema.MinItems,
-			MaxItems:    tschema.MaxItems,
-			UniqueItems: tschema.UniqueItems,
+			MinItems:    schema.MinItems,
+			MaxItems:    schema.MaxItems,
+			UniqueItems: schema.UniqueItems,
 		}
 	case "oneof":
 		oneof := []string{}
-		for _, alternative := range tschema.OneOf {
+		for _, alternative := range schema.OneOf {
 			altType, err := t.fromSchema(alternative)
 			if err != nil {
 				return "", err
@@ -472,21 +473,21 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) (string, error) {
 		}
 		t.Types[name] = &TmplOneOf{OneOf: oneof}
 	case "string":
-		switch tschema.Format {
+		switch schema.Format {
 		case "date-time":
 			mindate := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 			maxdate := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 			t.Types[name] = &TmplDateTime{Minimum: &mindate, Maximum: &maxdate}
 		default:
 			enum := []string{}
-			for _, v := range tschema.Enum {
+			for _, v := range schema.Enum {
 				enum = append(enum, v.(string))
 			}
 			regexp := ""
-			if tschema.Pattern != nil {
-				regexp = tschema.Pattern.String()
+			if schema.Pattern != nil {
+				regexp = schema.Pattern.String()
 			}
-			if tschema.Format == "uri" && regexp == "" {
+			if schema.Format == "uri" && regexp == "" {
 				regexp = uriRegexp
 			}
 
@@ -499,20 +500,20 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) (string, error) {
 			}
 
 			t.Types[name] = &TmplString{
-				MinLength: tschema.MinLength,
-				MaxLength: tschema.MaxLength,
+				MinLength: schema.MinLength,
+				MaxLength: schema.MaxLength,
 				Enum:      enum,
 				Pattern:   pattern,
 			}
 		}
 	case "number":
 		var minimum, maximum *float32
-		if tschema.Minimum != nil {
-			m, _ := tschema.Minimum.Float32()
+		if schema.Minimum != nil {
+			m, _ := schema.Minimum.Float32()
 			minimum = &m
 		}
-		if tschema.Maximum != nil {
-			m, _ := tschema.Maximum.Float32()
+		if schema.Maximum != nil {
+			m, _ := schema.Maximum.Float32()
 			maximum = &m
 		}
 		t.Types[name] = &TmplNumber{
