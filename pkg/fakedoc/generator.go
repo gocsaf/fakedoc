@@ -9,6 +9,7 @@
 package fakedoc
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -52,9 +53,38 @@ var ErrInvalidString = errors.New("not valid utf-8")
 
 // Generator is the type of CSAF document generators
 type Generator struct {
-	Template  *Template
-	Rand      *rand.Rand
-	FileCache map[string]string
+	Template   *Template
+	Rand       *rand.Rand
+	FileCache  map[string]string
+	NameSpaces map[string]*NameSpace
+}
+
+// NameSpace helps implement TmplID and TmplRef by collecting the IDs
+// and references for a name space. It holds both values and references
+// so that the references can be set to actually existing IDs once all
+// IDs have been generated
+type NameSpace struct {
+	Values []string
+	Refs   []*reference
+}
+
+func (ns *NameSpace) addValue(v string) {
+	ns.Values = append(ns.Values, v)
+}
+
+func (ns *NameSpace) addRef(r *reference) {
+	ns.Refs = append(ns.Refs, r)
+}
+
+// reference is the value of a node created for TmplRef during
+// generation. It's serialized to JSON as a JSON string.
+type reference struct {
+	namespace string
+	value     string
+}
+
+func (ref *reference) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ref.value)
 }
 
 // NewGenerator creates a new Generator based on a Template and an
@@ -65,15 +95,46 @@ func NewGenerator(tmpl *Template, rng *rand.Rand) *Generator {
 		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	}
 	return &Generator{
-		Template:  tmpl,
-		Rand:      rng,
-		FileCache: make(map[string]string),
+		Template:   tmpl,
+		Rand:       rng,
+		FileCache:  make(map[string]string),
+		NameSpaces: make(map[string]*NameSpace),
 	}
+}
+
+func (gen *Generator) getNamespace(namespace string) *NameSpace {
+	if _, ok := gen.NameSpaces[namespace]; !ok {
+		gen.NameSpaces[namespace] = &NameSpace{}
+	}
+	return gen.NameSpaces[namespace]
+}
+
+// addNSValue adds a value to a namespace
+func (gen *Generator) addNSValue(namespace, v string) {
+	gen.getNamespace(namespace).addValue(v)
+}
+
+// adNSRef adds a reference to a namespace
+func (gen *Generator) adNSRef(namespace string, r *reference) {
+	gen.getNamespace(namespace).addRef(r)
+}
+
+func (gen *Generator) hasNSValues(namespace string) bool {
+	return len(gen.getNamespace(namespace).Values) > 0
 }
 
 // Generate generates a document
 func (gen *Generator) Generate() (any, error) {
-	return gen.generateNode(gen.Template.Root, 25)
+	doc, err := gen.generateNode(gen.Template.Root, 25)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = gen.fixupReferences(); err != nil {
+		return nil, err
+	}
+
+	return doc, nil
 }
 
 func (gen *Generator) generateNode(typename string, depth int) (any, error) {
@@ -104,6 +165,10 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 		return gen.loremIpsum(node.MinLength, node.MaxLength, node.Unit), nil
 	case *TmplBook:
 		return gen.book(node.MinLength, node.MaxLength, node.Path)
+	case *TmplID:
+		return gen.generateID(node.Namespace), nil
+	case *TmplRef:
+		return gen.generateReference(node.Namespace)
 	case *TmplNumber:
 		return gen.randomNumber(node.Minimum, node.Maximum), nil
 	case *TmplDateTime:
@@ -388,4 +453,42 @@ func (gen *Generator) book(minlength, maxlength int, path string) (string, error
 	}
 	trimmed = trimmed[:length]
 	return string(trimmed), nil
+}
+
+func (gen *Generator) generateID(namespace string) string {
+	id := gen.randomString(1, 20)
+	gen.addNSValue(namespace, id)
+	return id
+}
+
+func (gen *Generator) generateReference(namespace string) (any, error) {
+	if !gen.hasNSValues(namespace) {
+		return nil, fmt.Errorf(
+			"%w: no IDs in namespace %q", ErrBranchAbandoned, namespace,
+		)
+	}
+
+	ref := &reference{
+		namespace: namespace,
+		value:     "",
+	}
+	gen.adNSRef(namespace, ref)
+	return ref, nil
+}
+
+func (gen *Generator) fixupReferences() error {
+	for name, ns := range gen.NameSpaces {
+		for _, ref := range ns.Refs {
+			if len(ns.Values) == 0 {
+				// this should never happen because references should
+				// only be generated if there are values available
+				return fmt.Errorf(
+					"no IDs when filling references in namespace %q",
+					name,
+				)
+			}
+			ref.value = choose(gen.Rand, ns.Values)
+		}
+	}
+	return nil
 }

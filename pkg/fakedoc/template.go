@@ -21,6 +21,11 @@ import (
 
 const (
 	uriRegexp = `(https?)://(example\.(com|org|net)|[a-zA-Z][a-zA-Z0-9]{10}\.example(/[a-zA-Z0-9.-]{1,10}){3})`
+
+	// constants for the 'synthetic' template type for the product ID
+	// generator
+	productIDTypeName  = "fakedoc:product_id_generator"
+	productIDNamespace = "product_id"
 )
 
 // Template describes the structure of the CSAF document to generate
@@ -318,6 +323,52 @@ func (t *TmplBook) FromToml(md toml.MetaData, primType toml.Primitive) error {
 	return nil
 }
 
+// TmplID describes how to generate IDs that may be referenced from
+// elsewhere in the document by TmplRef types using the same namespace.
+type TmplID struct {
+	// Namespace is the namespace for the IDs
+	Namespace string `toml:"namespace"`
+}
+
+// AsMap implements TmplNode
+func (t *TmplID) AsMap() map[string]any {
+	return map[string]any{
+		"type":      "id",
+		"namespace": t.Namespace,
+	}
+}
+
+// FromToml implements TmplNode
+func (t *TmplID) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	if err := md.PrimitiveDecode(primType, t); err != nil {
+		return err
+	}
+	return nil
+}
+
+// TmplRef generate strings that are chosen from the IDs generated for
+// the TmplID with the same namespace
+type TmplRef struct {
+	// Namespace is the namespace for the IDs
+	Namespace string `toml:"namespace"`
+}
+
+// AsMap implements TmplNode
+func (t *TmplRef) AsMap() map[string]any {
+	return map[string]any{
+		"type":      "ref",
+		"namespace": t.Namespace,
+	}
+}
+
+// FromToml implements TmplNode
+func (t *TmplRef) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	if err := md.PrimitiveDecode(primType, t); err != nil {
+		return err
+	}
+	return nil
+}
+
 // TmplNumber describes how to generate numbers
 type TmplNumber struct {
 	// Minimum is the minum value of the generated numbers
@@ -402,6 +453,11 @@ func FromSchema(schema *jsonschema.Schema) (*Template, error) {
 		return nil, err
 	}
 	template.Root = root
+
+	if err := template.applyCSAFSpecials(); err != nil {
+		return nil, err
+	}
+
 	return template, nil
 }
 
@@ -554,6 +610,54 @@ func getSimpleType(types []string) (string, error) {
 	return types[0], nil
 }
 
+func (t *Template) applyCSAFSpecials() error {
+	t.Types[productIDTypeName] = &TmplID{
+		Namespace: productIDNamespace,
+	}
+
+	if err := t.overwritePropertyType(
+		"csaf:#/$defs/full_product_name_t",
+		"product_id",
+		productIDTypeName,
+	); err != nil {
+		return err
+	}
+
+	return t.overwriteType(
+		"csaf:#/$defs/product_id_t",
+		&TmplRef{
+			Namespace: productIDNamespace,
+		},
+	)
+}
+
+func (t *Template) overwriteType(typename string, tmpl TmplNode) error {
+	_, ok := t.Types[typename]
+	if !ok {
+		return fmt.Errorf("type %s does not exist", typename)
+	}
+	t.Types[typename] = tmpl
+	return nil
+}
+
+func (t *Template) overwritePropertyType(typename, propname, proptype string) error {
+	tmpl, ok := t.Types[typename]
+	if !ok {
+		return fmt.Errorf("type %s does not exist", typename)
+	}
+	product, ok := tmpl.(*TmplObject)
+	if !ok {
+		return fmt.Errorf("type %s is not a TmplObject", typename)
+	}
+	for _, prop := range product.Properties {
+		if prop.Name == propname {
+			prop.Type = proptype
+			return nil
+		}
+	}
+	return fmt.Errorf("type %s has no property %s", typename, propname)
+}
+
 // LoadTemplate loads a template from a TOML file.
 func LoadTemplate(file string) (*Template, error) {
 	var template struct {
@@ -608,6 +712,10 @@ func decodeType(md toml.MetaData, primType toml.Primitive) (TmplNode, error) {
 		node = new(TmplLorem)
 	case "book":
 		node = new(TmplBook)
+	case "id":
+		node = new(TmplID)
+	case "ref":
+		node = new(TmplRef)
 	case "number":
 		node = new(TmplNumber)
 	case "date-time":
