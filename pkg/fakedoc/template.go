@@ -72,6 +72,7 @@ type Property struct {
 	Name     string `toml:"name"`
 	Type     string `toml:"type"`
 	Required bool   `toml:"required"`
+	Depends  string `toml:"depends"`
 }
 
 // TmplObject describes a JSON object

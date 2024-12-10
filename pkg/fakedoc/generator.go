@@ -317,20 +317,71 @@ func (gen *Generator) randomOneOf(oneof []string, depth int) (any, error) {
 	return nil, fmt.Errorf("could not generate any of %v", oneof)
 }
 
+func orderByDependency(props []*Property) ([]*Property, error) {
+	pm := make(map[string]*Property)
+	seen := make(map[string]bool)
+	var hasdeps []*Property
+	var sorted []*Property
+	for _, prop := range props {
+		pm[prop.Name] = prop
+		switch prop.Depends {
+		case "":
+			sorted = append(sorted, prop)
+			seen[prop.Name] = true
+		default:
+			hasdeps = append(hasdeps, prop)
+		}
+	}
+
+outer:
+	for len(hasdeps) != 0 {
+		for i, prop := range hasdeps {
+			dep, ok := pm[prop.Depends]
+			if !ok {
+				return nil, fmt.Errorf(
+					"property %s depends on unknown propety %s",
+					prop.Name,
+					prop.Depends,
+				)
+			}
+			if !seen[dep.Name] {
+				continue
+			}
+			sorted = append(sorted, prop)
+			seen[prop.Name] = true
+			hasdeps = slices.Delete(hasdeps, i, i+1)
+			continue outer
+		}
+		return nil, fmt.Errorf("could not determine dependency order")
+	}
+
+	return sorted, nil
+}
+
 func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
-	properties := make(map[string]any)
 	optional := make([]*Property, 0, len(node.Properties))
+	required := make([]*Property, 0, len(node.Properties))
 	for _, prop := range node.Properties {
 		switch {
 		case prop.Required:
-			value, err := gen.generateNode(prop.Type, depth-1)
-			if err != nil {
-				return nil, err
-			}
-			properties[prop.Name] = value
+			required = append(required, prop)
 		default:
 			optional = append(optional, prop)
 		}
+	}
+
+	required, err := orderByDependency(required)
+	if err != nil {
+		return nil, err
+	}
+
+	properties := make(map[string]any)
+	for _, prop := range required {
+		value, err := gen.generateNode(prop.Type, depth-1)
+		if err != nil {
+			return nil, err
+		}
+		properties[prop.Name] = value
 	}
 
 	// Choose a value for extraProps, the number of optional properties
@@ -365,6 +416,13 @@ func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
 		i := gen.Rand.IntN(len(optional))
 		prop := optional[i]
 		optional = slices.Delete(optional, i, i+1)
+		if prop.Depends != "" && properties[prop.Depends] == nil {
+			// prop dependency hasn't been generated yet, try something
+			// else first. Note: this test branch happens after the
+			// property has been removed from optional to avoid infinite
+			// loops.
+			continue
+		}
 		value, err := gen.generateNode(prop.Type, depth-1)
 		switch {
 		case errors.Is(err, ErrBranchAbandoned):
