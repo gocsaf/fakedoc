@@ -76,15 +76,24 @@ func (ns *NameSpace) addRef(r *reference) {
 	ns.Refs = append(ns.Refs, r)
 }
 
-// reference is the value of a node created for TmplRef during
-// generation. It's serialized to JSON as a JSON string.
+// reference is the value of a node created for TmplRef or arrays of
+// TmplRef during generation. In the former case it represents a single
+// reference serialized to JSON as a JSON string. In the latter case
+// it's a slice of references serialized as a JSON array of strings.
+// The length field indicates which variant it is.
 type reference struct {
 	namespace string
-	value     string
+	// length is less than zero to indicate a single reference, greater
+	// or equal to zero to indicate an array
+	length int
+	values []string
 }
 
 func (ref *reference) MarshalJSON() ([]byte, error) {
-	return json.Marshal(ref.value)
+	if ref.length < 0 {
+		return json.Marshal(ref.values[0])
+	}
+	return json.Marshal(ref.values)
 }
 
 // NewGenerator creates a new Generator based on a Template and an
@@ -121,6 +130,10 @@ func (gen *Generator) adNSRef(namespace string, r *reference) {
 
 func (gen *Generator) hasNSValues(namespace string) bool {
 	return len(gen.getNamespace(namespace).Values) > 0
+}
+
+func (gen *Generator) numNSValues(namespace string) int {
+	return len(gen.getNamespace(namespace).Values)
 }
 
 // Generate generates a document
@@ -205,6 +218,19 @@ func (gen *Generator) randomArray(tmpl *TmplArray, depth int) (any, error) {
 	if maxitems < 0 {
 		// FIXME: make bound on maximum length configurable
 		maxitems = minitems + 2
+	}
+
+	if refnode, ok := gen.Template.Types[tmpl.Items].(*TmplRef); ok {
+		known := gen.numNSValues(refnode.Namespace)
+		if known >= minitems && tmpl.UniqueItems {
+			ref := &reference{
+				namespace: refnode.Namespace,
+				length:    minitems + gen.Rand.IntN(known-minitems+1),
+				values:    nil,
+			}
+			gen.adNSRef(refnode.Namespace, ref)
+			return ref, nil
+		}
 	}
 
 	length := minitems + gen.Rand.IntN(maxitems-minitems+1)
@@ -470,7 +496,8 @@ func (gen *Generator) generateReference(namespace string) (any, error) {
 
 	ref := &reference{
 		namespace: namespace,
-		value:     "",
+		length:    -1,
+		values:    nil,
 	}
 	gen.adNSRef(namespace, ref)
 	return ref, nil
@@ -478,16 +505,23 @@ func (gen *Generator) generateReference(namespace string) (any, error) {
 
 func (gen *Generator) fixupReferences() error {
 	for name, ns := range gen.NameSpaces {
+		if len(ns.Values) == 0 && len(ns.Refs) > 0 {
+			// this should never happen because references should
+			// only be generated if there are values available
+			return fmt.Errorf(
+				"no IDs when filling references in namespace %q",
+				name,
+			)
+		}
 		for _, ref := range ns.Refs {
-			if len(ns.Values) == 0 {
-				// this should never happen because references should
-				// only be generated if there are values available
-				return fmt.Errorf(
-					"no IDs when filling references in namespace %q",
-					name,
-				)
+			switch {
+			case ref.length < 0:
+				ref.values = []string{choose(gen.Rand, ns.Values)}
+			case ref.length == 0:
+				ref.values = nil
+			default:
+				ref.values = chooseK(gen.Rand, ref.length, ns.Values)
 			}
-			ref.value = choose(gen.Rand, ns.Values)
 		}
 	}
 	return nil

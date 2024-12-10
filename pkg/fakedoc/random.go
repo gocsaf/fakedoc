@@ -21,6 +21,18 @@ func choose[T any](rand *rand.Rand, choices []T) T {
 	return choices[rand.IntN(len(choices))]
 }
 
+// chooseK returns a slice of K different randomly chosen elements of
+// choices. Assumes that choices has at least K elements and that all
+// elements are different.
+func chooseK[T any](rand *rand.Rand, k int, choices []T) []T {
+	perm := rand.Perm(len(choices))
+	chosen := make([]T, k)
+	for i := range k {
+		chosen[i] = choices[perm[i]]
+	}
+	return chosen
+}
+
 // shuffle randomly shuffles a slice
 func shuffle[T any](rand *rand.Rand, ts []T) []T {
 	rand.Shuffle(len(ts), func(i, j int) {
