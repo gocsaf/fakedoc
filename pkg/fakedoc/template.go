@@ -10,6 +10,7 @@ package fakedoc
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -26,6 +27,8 @@ const (
 	// generator
 	productIDTypeName  = "fakedoc:product_id_generator"
 	productIDNamespace = "product_id"
+	groupIDTypeName    = "fakedoc:group_id_generator"
+	groupIDNamespace   = "group_id"
 )
 
 // Template describes the structure of the CSAF document to generate
@@ -615,21 +618,48 @@ func (t *Template) applyCSAFSpecials() error {
 	t.Types[productIDTypeName] = &TmplID{
 		Namespace: productIDNamespace,
 	}
-
-	if err := t.overwritePropertyType(
-		"csaf:#/$defs/full_product_name_t",
-		"product_id",
-		productIDTypeName,
-	); err != nil {
-		return err
+	t.Types[groupIDTypeName] = &TmplID{
+		Namespace: groupIDNamespace,
 	}
 
-	return t.overwriteType(
+	var errs []error
+	collectErr := func(err error) {
+		errs = append(errs, err)
+	}
+
+	collectErr(t.modifyProperty(
+		"csaf:#/$defs/full_product_name_t",
+		"product_id",
+		func(p *Property) error {
+			p.Type = productIDTypeName
+			return nil
+		},
+	))
+
+	collectErr(t.modifyProperty(
+		"csaf:#/properties/product_tree/properties/product_groups/items",
+		"group_id",
+		func(p *Property) error {
+			p.Type = groupIDTypeName
+			p.Depends = "product_ids"
+			return nil
+		},
+	))
+
+	collectErr(t.overwriteType(
 		"csaf:#/$defs/product_id_t",
 		&TmplRef{
 			Namespace: productIDNamespace,
 		},
-	)
+	))
+	collectErr(t.overwriteType(
+		"csaf:#/$defs/product_group_id_t",
+		&TmplRef{
+			Namespace: groupIDNamespace,
+		},
+	))
+
+	return errors.Join(errs...)
 }
 
 func (t *Template) overwriteType(typename string, tmpl TmplNode) error {
@@ -641,19 +671,21 @@ func (t *Template) overwriteType(typename string, tmpl TmplNode) error {
 	return nil
 }
 
-func (t *Template) overwritePropertyType(typename, propname, proptype string) error {
+func (t *Template) modifyProperty(
+	typename, propname string,
+	modify func(*Property) error,
+) error {
 	tmpl, ok := t.Types[typename]
 	if !ok {
 		return fmt.Errorf("type %s does not exist", typename)
 	}
-	product, ok := tmpl.(*TmplObject)
+	obj, ok := tmpl.(*TmplObject)
 	if !ok {
 		return fmt.Errorf("type %s is not a TmplObject", typename)
 	}
-	for _, prop := range product.Properties {
-		if prop.Name == propname {
-			prop.Type = proptype
-			return nil
+	for _, p := range obj.Properties {
+		if p.Name == propname {
+			return modify(p)
 		}
 	}
 	return fmt.Errorf("type %s has no property %s", typename, propname)
