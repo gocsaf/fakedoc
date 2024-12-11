@@ -94,9 +94,24 @@ type TmplObject struct {
 
 // AsMap implements TmplNode
 func (t *TmplObject) AsMap() map[string]any {
+	var props []map[string]any
+	for _, p := range t.Properties {
+		m := map[string]any{
+			"name": p.Name,
+			"type": p.Type,
+		}
+		if p.Required {
+			m["required"] = p.Required
+		}
+		if p.Depends != "" {
+			m["depends"] = p.Depends
+		}
+		props = append(props, m)
+	}
+
 	m := map[string]any{
 		"type":       "object",
-		"properties": t.Properties,
+		"properties": props,
 	}
 	if t.MinProperties != -1 {
 		m["minproperties"] = t.MinProperties
