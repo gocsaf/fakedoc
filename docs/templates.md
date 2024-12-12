@@ -293,3 +293,31 @@ require custom text.
     type = "book"
     path = "moby-dick.txt"
 ```
+
+#### `id` and `ref`
+
+Together, these are used to generate IDs in the document, such as
+product IDs and group IDs, that are defined in the document in one place
+and referenced in other places in the document. To support multiple
+kinds of IDs, there can be any number of namespaces for IDs. Both `id`
+and `ref` have a `namespace` attribute that indicates which namespace to
+use. Which namespaces exist is implicitly defined by which namespaces
+are mentioned in the `id` templates.
+
+
+##### Attributes
+
+* `namespace`: String with the name of the namespace of the IDs.
+
+
+##### Example
+
+``` toml
+  [types."fakedoc:product_id_generator"]
+    namespace = "product_id"
+    type = "id"
+
+  [types."csaf:#/$defs/product_id_t"]
+    namespace = "product_id"
+    type = "ref"
+```
