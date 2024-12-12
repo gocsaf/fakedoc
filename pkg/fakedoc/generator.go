@@ -76,6 +76,13 @@ func (ns *NameSpace) addRef(r *reference) {
 	ns.Refs = append(ns.Refs, r)
 }
 
+func (ns *NameSpace) snapshot() *NameSpace {
+	return &NameSpace{
+		Values: ns.Values,
+		Refs:   ns.Refs,
+	}
+}
+
 // reference is the value of a node created for TmplRef or arrays of
 // TmplRef during generation. In the former case it represents a single
 // reference serialized to JSON as a JSON string. In the latter case
@@ -136,6 +143,18 @@ func (gen *Generator) numNSValues(namespace string) int {
 	return len(gen.getNamespace(namespace).Values)
 }
 
+func (gen *Generator) snapshotNamespaces() map[string]*NameSpace {
+	copy := make(map[string]*NameSpace, len(gen.NameSpaces))
+	for name, ns := range gen.NameSpaces {
+		copy[name] = ns.snapshot()
+	}
+	return copy
+}
+
+func (gen *Generator) restoreSnapshot(snapshot map[string]*NameSpace) {
+	gen.NameSpaces = snapshot
+}
+
 // Generate generates a document
 func (gen *Generator) Generate() (any, error) {
 	doc, err := gen.generateNode(gen.Template.Root, 25)
@@ -150,7 +169,7 @@ func (gen *Generator) Generate() (any, error) {
 	return doc, nil
 }
 
-func (gen *Generator) generateNode(typename string, depth int) (any, error) {
+func (gen *Generator) generateNode(typename string, depth int) (_ any, err error) {
 	if depth <= 0 {
 		return nil, ErrDepthExceeded
 	}
@@ -159,6 +178,17 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown type '%s'", typename)
 	}
+
+	// make sure IDs generated in abandoned branches are discarded so
+	// that we don't end up with e.g. references to group IDs that are
+	// not actually there.
+	snapshot := gen.snapshotNamespaces()
+	defer func() {
+		if errors.Is(err, ErrBranchAbandoned) {
+			gen.restoreSnapshot(snapshot)
+		}
+	}()
+
 	switch node := nodeTmpl.(type) {
 	case *TmplObject:
 		return gen.generateObject(node, depth)
