@@ -75,7 +75,6 @@ type Property struct {
 	Name     string `toml:"name"`
 	Type     string `toml:"type"`
 	Required bool   `toml:"required"`
-	Depends  string `toml:"depends"`
 }
 
 // TmplObject describes a JSON object
@@ -102,9 +101,6 @@ func (t *TmplObject) AsMap() map[string]any {
 		}
 		if p.Required {
 			m["required"] = p.Required
-		}
-		if p.Depends != "" {
-			m["depends"] = p.Depends
 		}
 		props = append(props, m)
 	}
@@ -656,7 +652,6 @@ func (t *Template) applyCSAFSpecials() error {
 		"group_id",
 		func(p *Property) error {
 			p.Type = groupIDTypeName
-			p.Depends = "product_ids"
 			return nil
 		},
 	))
