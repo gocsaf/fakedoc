@@ -144,11 +144,11 @@ func (gen *Generator) numNSValues(namespace string) int {
 }
 
 func (gen *Generator) snapshotNamespaces() map[string]*NameSpace {
-	copy := make(map[string]*NameSpace, len(gen.NameSpaces))
+	snap := make(map[string]*NameSpace, len(gen.NameSpaces))
 	for name, ns := range gen.NameSpaces {
-		copy[name] = ns.snapshot()
+		snap[name] = ns.snapshot()
 	}
-	return copy
+	return snap
 }
 
 func (gen *Generator) restoreSnapshot(snapshot map[string]*NameSpace) {
