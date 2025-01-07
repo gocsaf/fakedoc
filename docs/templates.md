@@ -271,3 +271,25 @@ document that contain prose text.
     unit = "sentences"
     type = "lorem"
 ```
+
+#### `book`
+
+The `book` describes a custom text file that is used as filler.
+This is particularly useful for the parts of a CSAF document that
+require custom text.
+
+##### Attributes
+
+* `path`: File path to the text file
+* `minlength`: Minimum length in units
+* `maxlength`: Maximum length in units
+
+
+##### Example
+
+``` toml
+  [types."csaf:#/properties/vulnerabilities/items/properties/threats/items/properties/details"]
+    minlength = 2
+    type = "book"
+    path = "moby-dick.txt"
+```

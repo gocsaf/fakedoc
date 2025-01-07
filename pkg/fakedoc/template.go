@@ -243,6 +243,16 @@ type TmplLorem struct {
 // LoremUnit represents the granularity of the lorem ipsum generator
 type LoremUnit string
 
+// TmplBook describes the text file for string generation
+type TmplBook struct {
+	// MinLength is the minimum length of the generated strings
+	MinLength int `toml:"minlength"`
+	// MaxLength is the maximum length of the generated strings
+	MaxLength int `toml:"maxlength"`
+	// Path is the location of the text file
+	Path string `toml:"path"`
+}
+
 const (
 	// LoremWords indicates that a bunch of words should be generated
 	LoremWords LoremUnit = "words"
@@ -274,6 +284,34 @@ func (t *TmplLorem) FromToml(md toml.MetaData, primType toml.Primitive) error {
 	t.MinLength = -1
 	t.MaxLength = -1
 	t.Unit = LoremWords
+	if err := md.PrimitiveDecode(primType, t); err != nil {
+		return err
+	}
+	return nil
+}
+
+// AsMap implements TmplNode
+func (t *TmplBook) AsMap() map[string]any {
+	m := map[string]any{
+		"type": "book",
+	}
+	if t.MinLength != -1 {
+		m["minlength"] = t.MinLength
+	}
+	if t.MaxLength != -1 {
+		m["maxlength"] = t.MaxLength
+	}
+	if t.Path != "" {
+		m["path"] = t.Path
+	}
+	return m
+}
+
+// FromToml implements TmplNode
+func (t *TmplBook) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	t.MinLength = -1
+	t.MaxLength = -1
+	t.Path = ""
 	if err := md.PrimitiveDecode(primType, t); err != nil {
 		return err
 	}
@@ -562,6 +600,8 @@ func decodeType(md toml.MetaData, primType toml.Primitive) (TmplNode, error) {
 		node = new(TmplString)
 	case "lorem":
 		node = new(TmplLorem)
+	case "book":
+		node = new(TmplBook)
 	case "number":
 		node = new(TmplNumber)
 	case "date-time":
