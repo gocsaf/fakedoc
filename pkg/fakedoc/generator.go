@@ -54,6 +54,7 @@ var ErrInvalidString = errors.New("not valid utf-8")
 // Generator is the type of CSAF document generators
 type Generator struct {
 	Template   *Template
+	Limits     *Limits
 	Rand       *rand.Rand
 	FileCache  map[string]string
 	NameSpaces map[string]*NameSpace
@@ -106,12 +107,18 @@ func (ref *reference) MarshalJSON() ([]byte, error) {
 // NewGenerator creates a new Generator based on a Template and an
 // optional random number generator. If the random number generator is
 // nil, a random number generator with a random seed will be used.
-func NewGenerator(tmpl *Template, rng *rand.Rand) *Generator {
+// Limits is an optional limits guidance.
+func NewGenerator(
+	tmpl *Template,
+	limits *Limits,
+	rng *rand.Rand,
+) *Generator {
 	if rng == nil {
 		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	}
 	return &Generator{
 		Template:   tmpl,
+		Limits:     limits,
 		Rand:       rng,
 		FileCache:  make(map[string]string),
 		NameSpaces: make(map[string]*NameSpace),
