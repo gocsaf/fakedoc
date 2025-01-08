@@ -60,6 +60,9 @@ type TmplNode interface {
 	// FromToml initializes a TmplNode from toml.MetaData and a
 	// toml.Primitive.
 	FromToml(md toml.MetaData, primType toml.Primitive) error
+
+	// Instantiate creates an instance from this template node.
+	Instantiate(gen *Generator, depth int) (any, error)
 }
 
 // Property describes how to generate one of an object's properties
@@ -98,7 +101,7 @@ func (t *TmplObject) AsMap() map[string]any {
 	return m
 }
 
-// FromToml implemts TmplNode
+// FromToml implements TmplNode
 func (t *TmplObject) FromToml(md toml.MetaData, primType toml.Primitive) error {
 	t.MinProperties = -1
 	t.MaxProperties = -1
@@ -120,6 +123,11 @@ func (t *TmplObject) FromToml(md toml.MetaData, primType toml.Primitive) error {
 	}
 
 	return nil
+}
+
+// Instantiate implements TmplNode
+func (t *TmplObject) Instantiate(gen *Generator, depth int) (any, error) {
+	return gen.generateObject(t, depth)
 }
 
 // TmplArray describes a JSON array
@@ -153,7 +161,7 @@ func (t *TmplArray) AsMap() map[string]any {
 	return m
 }
 
-// FromToml implemts TmplNode
+// FromToml implements TmplNode
 func (t *TmplArray) FromToml(md toml.MetaData, primType toml.Primitive) error {
 	t.MinItems = -1
 	t.MaxItems = -1
@@ -161,6 +169,11 @@ func (t *TmplArray) FromToml(md toml.MetaData, primType toml.Primitive) error {
 		return err
 	}
 	return nil
+}
+
+// Instantiate implements TmplNode
+func (t *TmplArray) Instantiate(gen *Generator, depth int) (any, error) {
+	return gen.randomArray(t, depth)
 }
 
 // TmplOneOf describes the choice between multiple types
@@ -177,12 +190,18 @@ func (t *TmplOneOf) AsMap() map[string]any {
 	}
 }
 
-// FromToml implemts TmplNode
+// FromToml implements TmplNode
 func (t *TmplOneOf) FromToml(md toml.MetaData, primType toml.Primitive) error {
 	if err := md.PrimitiveDecode(primType, t); err != nil {
 		return err
 	}
 	return nil
+}
+
+// Instantiate implements TmplNode
+func (t *TmplOneOf) Instantiate(gen *Generator, depth int) (any, error) {
+	typename := choose(gen.Rand, t.OneOf)
+	return gen.generateNode(typename, depth-1)
 }
 
 // TmplString describes how to generate strings
@@ -219,7 +238,7 @@ func (t *TmplString) AsMap() map[string]any {
 	return m
 }
 
-// FromToml implemts TmplNode
+// FromToml implements TmplNode
 func (t *TmplString) FromToml(md toml.MetaData, primType toml.Primitive) error {
 	t.MinLength = -1
 	t.MaxLength = -1
@@ -227,6 +246,17 @@ func (t *TmplString) FromToml(md toml.MetaData, primType toml.Primitive) error {
 		return err
 	}
 	return nil
+}
+
+// Instantiate implements TmplNode
+func (t *TmplString) Instantiate(gen *Generator, _ int) (any, error) {
+	if len(t.Enum) > 0 {
+		return choose(gen.Rand, t.Enum), nil
+	}
+	if t.Pattern != nil {
+		return t.Pattern.Sample(gen.Rand), nil
+	}
+	return gen.randomString(t.MinLength, t.MaxLength), nil
 }
 
 // TmplLorem describes how to generate strings
@@ -279,7 +309,7 @@ func (t *TmplLorem) AsMap() map[string]any {
 	return m
 }
 
-// FromToml implemts TmplNode
+// FromToml implements TmplNode
 func (t *TmplLorem) FromToml(md toml.MetaData, primType toml.Primitive) error {
 	t.MinLength = -1
 	t.MaxLength = -1
@@ -288,6 +318,11 @@ func (t *TmplLorem) FromToml(md toml.MetaData, primType toml.Primitive) error {
 		return err
 	}
 	return nil
+}
+
+// Instantiate implements TmplNode
+func (t *TmplLorem) Instantiate(gen *Generator, _ int) (any, error) {
+	return gen.loremIpsum(t.MinLength, t.MaxLength, t.Unit), nil
 }
 
 // AsMap implements TmplNode
@@ -318,6 +353,11 @@ func (t *TmplBook) FromToml(md toml.MetaData, primType toml.Primitive) error {
 	return nil
 }
 
+// Instantiate implements TmplNode
+func (t *TmplBook) Instantiate(gen *Generator, _ int) (any, error) {
+	return gen.book(t.MinLength, t.MaxLength, t.Path)
+}
+
 // TmplNumber describes how to generate numbers
 type TmplNumber struct {
 	// Minimum is the minum value of the generated numbers
@@ -341,12 +381,17 @@ func (t *TmplNumber) AsMap() map[string]any {
 	return m
 }
 
-// FromToml implemts TmplNode
+// FromToml implements TmplNode
 func (t *TmplNumber) FromToml(md toml.MetaData, primType toml.Primitive) error {
 	if err := md.PrimitiveDecode(primType, t); err != nil {
 		return err
 	}
 	return nil
+}
+
+// Instantiate implements TmplNode
+func (t *TmplNumber) Instantiate(gen *Generator, _ int) (any, error) {
+	return gen.randomNumber(t.Minimum, t.Maximum), nil
 }
 
 // TmplDateTime describes how to generate date/time values
@@ -372,12 +417,17 @@ func (t *TmplDateTime) AsMap() map[string]any {
 	return m
 }
 
-// FromToml implemts TmplNode
+// FromToml implements TmplNode
 func (t *TmplDateTime) FromToml(md toml.MetaData, primType toml.Primitive) error {
 	if err := md.PrimitiveDecode(primType, t); err != nil {
 		return err
 	}
 	return nil
+}
+
+// Instantiate implements TmplNode
+func (t *TmplDateTime) Instantiate(gen *Generator, _ int) (any, error) {
+	return gen.randomDateTime(t.Minimum, t.Maximum), nil
 }
 
 // FromCSAFSchema creates a new template from the built-in CSAF JSON

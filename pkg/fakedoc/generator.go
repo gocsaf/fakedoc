@@ -79,38 +79,10 @@ func (gen *Generator) generateNode(typename string, depth int) (any, error) {
 	if depth <= 0 {
 		return nil, ErrDepthExceeded
 	}
-
-	nodeTmpl, ok := gen.Template.Types[typename]
-	if !ok {
-		return nil, fmt.Errorf("unknown type '%s'", typename)
+	if nodeTmpl := gen.Template.Types[typename]; nodeTmpl != nil {
+		return nodeTmpl.Instantiate(gen, depth)
 	}
-	switch node := nodeTmpl.(type) {
-	case *TmplObject:
-		return gen.generateObject(node, depth)
-	case *TmplArray:
-		return gen.randomArray(node, depth)
-	case *TmplOneOf:
-		typename := choose(gen.Rand, node.OneOf)
-		return gen.generateNode(typename, depth-1)
-	case *TmplString:
-		if len(node.Enum) > 0 {
-			return choose(gen.Rand, node.Enum), nil
-		}
-		if node.Pattern != nil {
-			return node.Pattern.Sample(gen.Rand), nil
-		}
-		return gen.randomString(node.MinLength, node.MaxLength), nil
-	case *TmplLorem:
-		return gen.loremIpsum(node.MinLength, node.MaxLength, node.Unit), nil
-	case *TmplBook:
-		return gen.book(node.MinLength, node.MaxLength, node.Path)
-	case *TmplNumber:
-		return gen.randomNumber(node.Minimum, node.Maximum), nil
-	case *TmplDateTime:
-		return gen.randomDateTime(node.Minimum, node.Maximum), nil
-	default:
-		return nil, fmt.Errorf("unexpected template node type %T", nodeTmpl)
-	}
+	return nil, fmt.Errorf("unknown type %q", typename)
 }
 
 func (gen *Generator) randomString(minlength, maxlength int) string {
