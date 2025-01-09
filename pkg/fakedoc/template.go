@@ -10,6 +10,7 @@ package fakedoc
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -21,6 +22,13 @@ import (
 
 const (
 	uriRegexp = `(https?)://(example\.(com|org|net)|[a-zA-Z][a-zA-Z0-9]{10}\.example(/[a-zA-Z0-9.-]{1,10}){3})`
+
+	// constants for the 'synthetic' template type for the product ID
+	// generator
+	productIDTypeName  = "fakedoc:product_id_generator"
+	productIDNamespace = "product_id"
+	groupIDTypeName    = "fakedoc:group_id_generator"
+	groupIDNamespace   = "group_id"
 )
 
 // Template describes the structure of the CSAF document to generate
@@ -85,9 +93,21 @@ type TmplObject struct {
 
 // AsMap implements TmplNode
 func (t *TmplObject) AsMap() map[string]any {
+	var props []map[string]any
+	for _, p := range t.Properties {
+		m := map[string]any{
+			"name": p.Name,
+			"type": p.Type,
+		}
+		if p.Required {
+			m["required"] = p.Required
+		}
+		props = append(props, m)
+	}
+
 	m := map[string]any{
 		"type":       "object",
-		"properties": t.Properties,
+		"properties": props,
 	}
 	if t.MinProperties != -1 {
 		m["minproperties"] = t.MinProperties
@@ -318,6 +338,52 @@ func (t *TmplBook) FromToml(md toml.MetaData, primType toml.Primitive) error {
 	return nil
 }
 
+// TmplID describes how to generate IDs that may be referenced from
+// elsewhere in the document by TmplRef types using the same namespace.
+type TmplID struct {
+	// Namespace is the namespace for the IDs
+	Namespace string `toml:"namespace"`
+}
+
+// AsMap implements TmplNode
+func (t *TmplID) AsMap() map[string]any {
+	return map[string]any{
+		"type":      "id",
+		"namespace": t.Namespace,
+	}
+}
+
+// FromToml implements TmplNode
+func (t *TmplID) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	if err := md.PrimitiveDecode(primType, t); err != nil {
+		return err
+	}
+	return nil
+}
+
+// TmplRef generate strings that are chosen from the IDs generated for
+// the TmplID with the same namespace
+type TmplRef struct {
+	// Namespace is the namespace for the IDs
+	Namespace string `toml:"namespace"`
+}
+
+// AsMap implements TmplNode
+func (t *TmplRef) AsMap() map[string]any {
+	return map[string]any{
+		"type":      "ref",
+		"namespace": t.Namespace,
+	}
+}
+
+// FromToml implements TmplNode
+func (t *TmplRef) FromToml(md toml.MetaData, primType toml.Primitive) error {
+	if err := md.PrimitiveDecode(primType, t); err != nil {
+		return err
+	}
+	return nil
+}
+
 // TmplNumber describes how to generate numbers
 type TmplNumber struct {
 	// Minimum is the minum value of the generated numbers
@@ -395,45 +461,54 @@ func FromCSAFSchema() (*Template, error) {
 func FromSchema(schema *jsonschema.Schema) (*Template, error) {
 	template := &Template{
 		Types: make(map[string]TmplNode),
-		Root:  ShortLocation(schema),
+		Root:  "",
 	}
-	if err := template.fromSchema(schema); err != nil {
+	root, err := template.fromSchema(schema)
+	if err != nil {
 		return nil, err
 	}
+	template.Root = root
+
+	if err := template.applyCSAFSpecials(); err != nil {
+		return nil, err
+	}
+
 	return template, nil
 }
 
-func (t *Template) fromSchema(schema *jsonschema.Schema) error {
+func (t *Template) fromSchema(origschema *jsonschema.Schema) (string, error) {
+	ty, schema, err := getType(origschema)
+	if err != nil {
+		return "", err
+	}
+
 	name := ShortLocation(schema)
 
 	// Check for recursion. If name is already in t.Types, we don't have
 	// to do anything. If the associated value is nil, we're currently
 	// building the node, otherwise the node has already been
-	// contstructed.
+	// constructed.
 	if _, ok := t.Types[name]; ok {
-		return nil
+		return name, nil
 	}
 	t.Types[name] = nil
 
-	ty, tschema, err := getType(schema)
-	if err != nil {
-		return err
-	}
 	switch ty {
 	case "object":
-		required := make(map[string]bool, len(tschema.Required))
-		for _, name := range tschema.Required {
+		required := make(map[string]bool, len(schema.Required))
+		for _, name := range schema.Required {
 			required[name] = true
 		}
 
 		properties := []*Property{}
-		for propName, prop := range tschema.Properties {
-			if err := t.fromSchema(prop); err != nil {
-				return err
+		for propName, prop := range schema.Properties {
+			propType, err := t.fromSchema(prop)
+			if err != nil {
+				return "", err
 			}
 			properties = append(properties, &Property{
 				Name:     propName,
-				Type:     ShortLocation(prop),
+				Type:     propType,
 				Required: required[propName],
 			})
 		}
@@ -444,44 +519,46 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 
 		t.Types[name] = &TmplObject{
 			Properties:    properties,
-			MinProperties: tschema.MinProperties,
-			MaxProperties: tschema.MaxProperties,
+			MinProperties: schema.MinProperties,
+			MaxProperties: schema.MaxProperties,
 		}
 	case "array":
-		if err := t.fromSchema(tschema.Items2020); err != nil {
-			return err
+		itemsType, err := t.fromSchema(schema.Items2020)
+		if err != nil {
+			return "", err
 		}
 		t.Types[name] = &TmplArray{
-			Items:       ShortLocation(tschema.Items2020),
-			MinItems:    tschema.MinItems,
-			MaxItems:    tschema.MaxItems,
-			UniqueItems: tschema.UniqueItems,
+			Items:       itemsType,
+			MinItems:    schema.MinItems,
+			MaxItems:    schema.MaxItems,
+			UniqueItems: schema.UniqueItems,
 		}
 	case "oneof":
 		oneof := []string{}
-		for _, alternative := range tschema.OneOf {
-			if err := t.fromSchema(alternative); err != nil {
-				return err
+		for _, alternative := range schema.OneOf {
+			altType, err := t.fromSchema(alternative)
+			if err != nil {
+				return "", err
 			}
-			oneof = append(oneof, ShortLocation(alternative))
+			oneof = append(oneof, altType)
 		}
 		t.Types[name] = &TmplOneOf{OneOf: oneof}
 	case "string":
-		switch tschema.Format {
+		switch schema.Format {
 		case "date-time":
 			mindate := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 			maxdate := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 			t.Types[name] = &TmplDateTime{Minimum: &mindate, Maximum: &maxdate}
 		default:
 			enum := []string{}
-			for _, v := range tschema.Enum {
+			for _, v := range schema.Enum {
 				enum = append(enum, v.(string))
 			}
 			regexp := ""
-			if tschema.Pattern != nil {
-				regexp = tschema.Pattern.String()
+			if schema.Pattern != nil {
+				regexp = schema.Pattern.String()
 			}
-			if tschema.Format == "uri" && regexp == "" {
+			if schema.Format == "uri" && regexp == "" {
 				regexp = uriRegexp
 			}
 
@@ -489,25 +566,25 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 			if regexp != "" {
 				pattern, err = CompileRegexp(regexp)
 				if err != nil {
-					return nil
+					return "", err
 				}
 			}
 
 			t.Types[name] = &TmplString{
-				MinLength: tschema.MinLength,
-				MaxLength: tschema.MaxLength,
+				MinLength: schema.MinLength,
+				MaxLength: schema.MaxLength,
 				Enum:      enum,
 				Pattern:   pattern,
 			}
 		}
 	case "number":
 		var minimum, maximum *float32
-		if tschema.Minimum != nil {
-			m, _ := tschema.Minimum.Float32()
+		if schema.Minimum != nil {
+			m, _ := schema.Minimum.Float32()
 			minimum = &m
 		}
-		if tschema.Maximum != nil {
-			m, _ := tschema.Maximum.Float32()
+		if schema.Maximum != nil {
+			m, _ := schema.Maximum.Float32()
 			maximum = &m
 		}
 		t.Types[name] = &TmplNumber{
@@ -515,9 +592,9 @@ func (t *Template) fromSchema(schema *jsonschema.Schema) error {
 			Maximum: maximum,
 		}
 	default:
-		return fmt.Errorf("unexpected type: %s", ty)
+		return "", fmt.Errorf("unexpected type: %s", ty)
 	}
-	return nil
+	return name, nil
 }
 
 func getType(schema *jsonschema.Schema) (string, *jsonschema.Schema, error) {
@@ -546,6 +623,82 @@ func getSimpleType(types []string) (string, error) {
 		return "", fmt.Errorf("too many types: %v", types)
 	}
 	return types[0], nil
+}
+
+func (t *Template) applyCSAFSpecials() error {
+	t.Types[productIDTypeName] = &TmplID{
+		Namespace: productIDNamespace,
+	}
+	t.Types[groupIDTypeName] = &TmplID{
+		Namespace: groupIDNamespace,
+	}
+
+	var errs []error
+	collectErr := func(err error) {
+		errs = append(errs, err)
+	}
+
+	collectErr(t.modifyProperty(
+		"csaf:#/$defs/full_product_name_t",
+		"product_id",
+		func(p *Property) error {
+			p.Type = productIDTypeName
+			return nil
+		},
+	))
+
+	collectErr(t.modifyProperty(
+		"csaf:#/properties/product_tree/properties/product_groups/items",
+		"group_id",
+		func(p *Property) error {
+			p.Type = groupIDTypeName
+			return nil
+		},
+	))
+
+	collectErr(t.overwriteType(
+		"csaf:#/$defs/product_id_t",
+		&TmplRef{
+			Namespace: productIDNamespace,
+		},
+	))
+	collectErr(t.overwriteType(
+		"csaf:#/$defs/product_group_id_t",
+		&TmplRef{
+			Namespace: groupIDNamespace,
+		},
+	))
+
+	return errors.Join(errs...)
+}
+
+func (t *Template) overwriteType(typename string, tmpl TmplNode) error {
+	_, ok := t.Types[typename]
+	if !ok {
+		return fmt.Errorf("type %s does not exist", typename)
+	}
+	t.Types[typename] = tmpl
+	return nil
+}
+
+func (t *Template) modifyProperty(
+	typename, propname string,
+	modify func(*Property) error,
+) error {
+	tmpl, ok := t.Types[typename]
+	if !ok {
+		return fmt.Errorf("type %s does not exist", typename)
+	}
+	obj, ok := tmpl.(*TmplObject)
+	if !ok {
+		return fmt.Errorf("type %s is not a TmplObject", typename)
+	}
+	for _, p := range obj.Properties {
+		if p.Name == propname {
+			return modify(p)
+		}
+	}
+	return fmt.Errorf("type %s has no property %s", typename, propname)
 }
 
 // LoadTemplate loads a template from a TOML file.
@@ -602,6 +755,10 @@ func decodeType(md toml.MetaData, primType toml.Primitive) (TmplNode, error) {
 		node = new(TmplLorem)
 	case "book":
 		node = new(TmplBook)
+	case "id":
+		node = new(TmplID)
+	case "ref":
+		node = new(TmplRef)
 	case "number":
 		node = new(TmplNumber)
 	case "date-time":
