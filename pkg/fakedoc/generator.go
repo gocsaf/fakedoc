@@ -9,6 +9,7 @@
 package fakedoc
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,18 +25,26 @@ import (
 	"github.com/go-loremipsum/loremipsum"
 )
 
+// ErrBranchAbandoned is the base errors that indicate that the
+// generator should abandon a recursive descent and try again with a
+// different branch.
+//
+// This error is mostly used internally in the generator and is unlikely
+// to be returned from Generate method.
+var ErrBranchAbandoned = errors.New("branch abandoned")
+
 // ErrDepthExceeded is returned as error by the generator if exceeding
 // the maximum depth of the generated document could not be avoided.
-// This is mostly used internally in the generator and is unlikely to be
-// returned from Generate method.
-var ErrDepthExceeded = errors.New("maximum depth exceeded")
+// It is based on ErrBranchAbandoned
+var ErrDepthExceeded = fmt.Errorf("%w: maximum depth exceeded", ErrBranchAbandoned)
 
 // ErrNoValidValue is returned as error by the generator if no value
 // that conforms to the constraints given in the template could be
 // generated. This can happen for arrays where UniqueItems is true, for
 // instance, if the minimum number of items is large compared to number
 // of different valid items.
-var ErrNoValidValue = errors.New("could not generate valid value")
+// It is based on ErrBranchAbandoned
+var ErrNoValidValue = fmt.Errorf("%w: could not generate valid value", ErrBranchAbandoned)
 
 // ErrInvalidString is returned as error by the generator if the input
 // text is not valid UTF-8. This can happen if the input is a binary
@@ -44,10 +53,55 @@ var ErrInvalidString = errors.New("not valid utf-8")
 
 // Generator is the type of CSAF document generators
 type Generator struct {
-	Template  *Template
-	Limits    *Limits
-	Rand      *rand.Rand
-	FileCache map[string]string
+	Template   *Template
+	Limits     *Limits
+	Rand       *rand.Rand
+	FileCache  map[string]string
+	NameSpaces map[string]*NameSpace
+}
+
+// NameSpace helps implement TmplID and TmplRef by collecting the IDs
+// and references for a name space. It holds both values and references
+// so that the references can be set to actually existing IDs once all
+// IDs have been generated
+type NameSpace struct {
+	Values []string
+	Refs   []*reference
+}
+
+func (ns *NameSpace) addValue(v string) {
+	ns.Values = append(ns.Values, v)
+}
+
+func (ns *NameSpace) addRef(r *reference) {
+	ns.Refs = append(ns.Refs, r)
+}
+
+func (ns *NameSpace) snapshot() *NameSpace {
+	return &NameSpace{
+		Values: ns.Values,
+		Refs:   ns.Refs,
+	}
+}
+
+// reference is the value of a node created for TmplRef or arrays of
+// TmplRef during generation. In the former case it represents a single
+// reference serialized to JSON as a JSON string. In the latter case
+// it's a slice of references serialized as a JSON array of strings.
+// The length field indicates which variant it is.
+type reference struct {
+	namespace string
+	// length is less than zero to indicate a single reference, greater
+	// or equal to zero to indicate an array
+	length int
+	values []string
+}
+
+func (ref *reference) MarshalJSON() ([]byte, error) {
+	if ref.length < 0 {
+		return json.Marshal(ref.values[0])
+	}
+	return json.Marshal(ref.values)
 }
 
 // NewGenerator creates a new Generator based on a Template and an
@@ -63,23 +117,80 @@ func NewGenerator(
 		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	}
 	return &Generator{
-		Template:  tmpl,
-		Limits:    limits,
-		Rand:      rng,
-		FileCache: make(map[string]string),
+		Template:   tmpl,
+		Limits:     limits,
+		Rand:       rng,
+		FileCache:  make(map[string]string),
+		NameSpaces: make(map[string]*NameSpace),
 	}
+}
+
+func (gen *Generator) getNamespace(namespace string) *NameSpace {
+	if _, ok := gen.NameSpaces[namespace]; !ok {
+		gen.NameSpaces[namespace] = &NameSpace{}
+	}
+	return gen.NameSpaces[namespace]
+}
+
+// addNSValue adds a value to a namespace
+func (gen *Generator) addNSValue(namespace, v string) {
+	gen.getNamespace(namespace).addValue(v)
+}
+
+// adNSRef adds a reference to a namespace
+func (gen *Generator) adNSRef(namespace string, r *reference) {
+	gen.getNamespace(namespace).addRef(r)
+}
+
+func (gen *Generator) hasNSValues(namespace string) bool {
+	return len(gen.getNamespace(namespace).Values) > 0
+}
+
+func (gen *Generator) numNSValues(namespace string) int {
+	return len(gen.getNamespace(namespace).Values)
+}
+
+func (gen *Generator) snapshotNamespaces() map[string]*NameSpace {
+	snap := make(map[string]*NameSpace, len(gen.NameSpaces))
+	for name, ns := range gen.NameSpaces {
+		snap[name] = ns.snapshot()
+	}
+	return snap
+}
+
+func (gen *Generator) restoreSnapshot(snapshot map[string]*NameSpace) {
+	gen.NameSpaces = snapshot
 }
 
 // Generate generates a document
 func (gen *Generator) Generate() (any, error) {
-	return gen.generateNode(gen.Template.Root, 25)
+	doc, err := gen.generateNode(gen.Template.Root, 25)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = gen.fixupReferences(); err != nil {
+		return nil, err
+	}
+
+	return doc, nil
 }
 
-func (gen *Generator) generateNode(typename string, depth int) (any, error) {
+func (gen *Generator) generateNode(typename string, depth int) (_ any, err error) {
 	if depth <= 0 {
 		return nil, ErrDepthExceeded
 	}
-	if nodeTmpl := gen.Template.Types[typename]; nodeTmpl != nil {
+	// make sure IDs generated in abandoned branches are discarded so
+	// that we don't end up with e.g. references to group IDs that are
+	// not actually there.
+	snapshot := gen.snapshotNamespaces()
+	defer func() {
+		if errors.Is(err, ErrBranchAbandoned) {
+			gen.restoreSnapshot(snapshot)
+		}
+	}()
+	nodeTmpl := gen.Template.Types[typename]
+	if nodeTmpl != nil {
 		return nodeTmpl.Instantiate(gen, depth)
 	}
 	return nil, fmt.Errorf("unknown type %q", typename)
@@ -112,6 +223,19 @@ func (gen *Generator) randomArray(tmpl *TmplArray, depth int) (any, error) {
 	if maxitems < 0 {
 		// FIXME: make bound on maximum length configurable
 		maxitems = minitems + 2
+	}
+
+	if refnode, ok := gen.Template.Types[tmpl.Items].(*TmplRef); ok {
+		known := gen.numNSValues(refnode.Namespace)
+		if known >= minitems && tmpl.UniqueItems {
+			ref := &reference{
+				namespace: refnode.Namespace,
+				length:    minitems + gen.Rand.IntN(known-minitems+1),
+				values:    nil,
+			}
+			gen.adNSRef(refnode.Namespace, ref)
+			return ref, nil
+		}
 	}
 
 	length := minitems + gen.Rand.IntN(maxitems-minitems+1)
@@ -180,20 +304,42 @@ generateItem:
 	return item, nil
 }
 
+func (gen *Generator) randomOneOf(oneof []string, depth int) (any, error) {
+	shuffled := shuffle(gen.Rand, oneof)
+	var abandoned error
+	for _, typename := range shuffled {
+		value, err := gen.generateNode(typename, depth-1)
+		if errors.Is(err, ErrBranchAbandoned) {
+			abandoned = err
+			continue
+		}
+		return value, err
+	}
+
+	if abandoned != nil {
+		return nil, abandoned
+	}
+	return nil, fmt.Errorf("could not generate any of %v", oneof)
+}
+
 func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
-	properties := make(map[string]any)
-	optional := make([]*Property, 0, len(node.Properties))
+	var optional, required []*Property
 	for _, prop := range node.Properties {
 		switch {
 		case prop.Required:
-			value, err := gen.generateNode(prop.Type, depth-1)
-			if err != nil {
-				return nil, err
-			}
-			properties[prop.Name] = value
+			required = append(required, prop)
 		default:
 			optional = append(optional, prop)
 		}
+	}
+
+	properties := make(map[string]any)
+	for _, prop := range required {
+		value, err := gen.generateNode(prop.Type, depth-1)
+		if err != nil {
+			return nil, err
+		}
+		properties[prop.Name] = value
 	}
 
 	// Choose a value for extraProps, the number of optional properties
@@ -223,15 +369,15 @@ func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
 	// try. Generating a property may fail because the maximum depth
 	// would be exceeded in which case we just try again with a
 	// different property.
-	depthExceeded := false
+	var branchAbandoned error
 	for extraProps > 0 && len(optional) > 0 {
 		i := gen.Rand.IntN(len(optional))
 		prop := optional[i]
 		optional = slices.Delete(optional, i, i+1)
 		value, err := gen.generateNode(prop.Type, depth-1)
 		switch {
-		case errors.Is(err, ErrDepthExceeded):
-			depthExceeded = true
+		case errors.Is(err, ErrBranchAbandoned):
+			branchAbandoned = err
 			continue
 		case err != nil:
 			return nil, err
@@ -245,8 +391,8 @@ func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
 	// failure is due to exceeding the maximum depth we report that to
 	// the caller so that it can try something else.
 	if len(properties) < minProps {
-		if depthExceeded {
-			return nil, ErrDepthExceeded
+		if branchAbandoned != nil {
+			return nil, branchAbandoned
 		}
 		return nil, fmt.Errorf("could not generate at least %d properties", minProps)
 	}
@@ -342,4 +488,50 @@ func (gen *Generator) book(minlength, maxlength int, path string) (string, error
 	}
 	trimmed = trimmed[:length]
 	return string(trimmed), nil
+}
+
+func (gen *Generator) generateID(namespace string) string {
+	id := gen.randomString(1, 20)
+	gen.addNSValue(namespace, id)
+	return id
+}
+
+func (gen *Generator) generateReference(namespace string) (any, error) {
+	if !gen.hasNSValues(namespace) {
+		return nil, fmt.Errorf(
+			"%w: no IDs in namespace %q", ErrBranchAbandoned, namespace,
+		)
+	}
+
+	ref := &reference{
+		namespace: namespace,
+		length:    -1,
+		values:    nil,
+	}
+	gen.adNSRef(namespace, ref)
+	return ref, nil
+}
+
+func (gen *Generator) fixupReferences() error {
+	for name, ns := range gen.NameSpaces {
+		if len(ns.Values) == 0 && len(ns.Refs) > 0 {
+			// this should never happen because references should
+			// only be generated if there are values available
+			return fmt.Errorf(
+				"no IDs when filling references in namespace %q",
+				name,
+			)
+		}
+		for _, ref := range ns.Refs {
+			switch {
+			case ref.length < 0:
+				ref.values = []string{choose(gen.Rand, ns.Values)}
+			case ref.length == 0:
+				ref.values = nil
+			default:
+				ref.values = chooseK(gen.Rand, ref.length, ns.Values)
+			}
+		}
+	}
+	return nil
 }
