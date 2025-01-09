@@ -189,8 +189,7 @@ func (gen *Generator) generateNode(typename string, depth int) (_ any, err error
 			gen.restoreSnapshot(snapshot)
 		}
 	}()
-	nodeTmpl := gen.Template.Types[typename]
-	if nodeTmpl != nil {
+	if nodeTmpl := gen.Template.Types[typename]; nodeTmpl != nil {
 		return nodeTmpl.Instantiate(gen, depth)
 	}
 	return nil, fmt.Errorf("unknown type %q", typename)
