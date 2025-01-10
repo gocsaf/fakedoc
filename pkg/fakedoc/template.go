@@ -60,17 +60,59 @@ func (t *Template) Merge(other *Template) {
 	}
 }
 
+// FromToml initializes a TmplNode from toml.MetaData and a
+// toml.Primitive.
+type FromToml interface {
+	FromToml(md toml.MetaData, primType toml.Primitive) error
+}
+
 // TmplNode is the interface for template nodes.
 type TmplNode interface {
 	// AsMap returns a map describing the node for the TOML file
 	AsMap() map[string]any
 
-	// FromToml initializes a TmplNode from toml.MetaData and a
-	// toml.Primitive.
-	FromToml(md toml.MetaData, primType toml.Primitive) error
-
 	// Instantiate creates an instance from this template node.
 	Instantiate(gen *Generator, depth int) (any, error)
+}
+
+// nodeFactories holds a map of node factories.
+var nodeFactories = map[string]func() TmplNode{
+	"string": func() TmplNode {
+		return &TmplString{
+			MinLength: -1,
+			MaxLength: -1,
+		}
+	},
+	"lorem": func() TmplNode {
+		return &TmplLorem{
+			MinLength: -1,
+			MaxLength: -1,
+			Unit:      LoremWords,
+		}
+	},
+	"book": func() TmplNode {
+		return &TmplBook{
+			MinLength: -1,
+			MaxLength: -1,
+		}
+	},
+	"array": func() TmplNode {
+		return &TmplArray{
+			MinItems: -1,
+			MaxItems: -1,
+		}
+	},
+	"object": func() TmplNode {
+		return &TmplObject{
+			MinProperties: -1,
+			MaxProperties: -1,
+		}
+	},
+	"id":        func() TmplNode { return new(TmplID) },
+	"ref":       func() TmplNode { return new(TmplRef) },
+	"number":    func() TmplNode { return new(TmplNumber) },
+	"date-time": func() TmplNode { return new(TmplDateTime) },
+	"oneof":     func() TmplNode { return new(TmplOneOf) },
 }
 
 // Property describes how to generate one of an object's properties
@@ -121,10 +163,8 @@ func (t *TmplObject) AsMap() map[string]any {
 	return m
 }
 
-// FromToml implements TmplNode
+// FromToml implements FromToml
 func (t *TmplObject) FromToml(md toml.MetaData, primType toml.Primitive) error {
-	t.MinProperties = -1
-	t.MaxProperties = -1
 	if err := md.PrimitiveDecode(primType, t); err != nil {
 		return err
 	}
@@ -181,16 +221,6 @@ func (t *TmplArray) AsMap() map[string]any {
 	return m
 }
 
-// FromToml implements TmplNode
-func (t *TmplArray) FromToml(md toml.MetaData, primType toml.Primitive) error {
-	t.MinItems = -1
-	t.MaxItems = -1
-	if err := md.PrimitiveDecode(primType, t); err != nil {
-		return err
-	}
-	return nil
-}
-
 // Instantiate implements TmplNode
 func (t *TmplArray) Instantiate(gen *Generator, depth int) (any, error) {
 	return gen.randomArray(t, depth)
@@ -208,14 +238,6 @@ func (t *TmplOneOf) AsMap() map[string]any {
 		"type":  "oneof",
 		"oneof": t.OneOf,
 	}
-}
-
-// FromToml implements TmplNode
-func (t *TmplOneOf) FromToml(md toml.MetaData, primType toml.Primitive) error {
-	if err := md.PrimitiveDecode(primType, t); err != nil {
-		return err
-	}
-	return nil
 }
 
 // Instantiate implements TmplNode
@@ -256,16 +278,6 @@ func (t *TmplString) AsMap() map[string]any {
 		m["pattern"] = t.Pattern.Pattern
 	}
 	return m
-}
-
-// FromToml implements TmplNode
-func (t *TmplString) FromToml(md toml.MetaData, primType toml.Primitive) error {
-	t.MinLength = -1
-	t.MaxLength = -1
-	if err := md.PrimitiveDecode(primType, t); err != nil {
-		return err
-	}
-	return nil
 }
 
 // Instantiate implements TmplNode
@@ -329,17 +341,6 @@ func (t *TmplLorem) AsMap() map[string]any {
 	return m
 }
 
-// FromToml implements TmplNode
-func (t *TmplLorem) FromToml(md toml.MetaData, primType toml.Primitive) error {
-	t.MinLength = -1
-	t.MaxLength = -1
-	t.Unit = LoremWords
-	if err := md.PrimitiveDecode(primType, t); err != nil {
-		return err
-	}
-	return nil
-}
-
 // Instantiate implements TmplNode
 func (t *TmplLorem) Instantiate(gen *Generator, _ int) (any, error) {
 	return gen.loremIpsum(t.MinLength, t.MaxLength, t.Unit), nil
@@ -362,17 +363,6 @@ func (t *TmplBook) AsMap() map[string]any {
 	return m
 }
 
-// FromToml implements TmplNode
-func (t *TmplBook) FromToml(md toml.MetaData, primType toml.Primitive) error {
-	t.MinLength = -1
-	t.MaxLength = -1
-	t.Path = ""
-	if err := md.PrimitiveDecode(primType, t); err != nil {
-		return err
-	}
-	return nil
-}
-
 // Instantiate implements TmplNode
 func (t *TmplBook) Instantiate(gen *Generator, _ int) (any, error) {
 	return gen.book(t.MinLength, t.MaxLength, t.Path)
@@ -393,14 +383,6 @@ func (t *TmplID) AsMap() map[string]any {
 	}
 }
 
-// FromToml implements TmplNode
-func (t *TmplID) FromToml(md toml.MetaData, primType toml.Primitive) error {
-	if err := md.PrimitiveDecode(primType, t); err != nil {
-		return err
-	}
-	return nil
-}
-
 // Instantiate implements TmplNode
 func (t *TmplID) Instantiate(gen *Generator, _ int) (any, error) {
 	return gen.generateID(t.Namespace), nil
@@ -419,14 +401,6 @@ func (t *TmplRef) AsMap() map[string]any {
 		"type":      "ref",
 		"namespace": t.Namespace,
 	}
-}
-
-// FromToml implements TmplNode
-func (t *TmplRef) FromToml(md toml.MetaData, primType toml.Primitive) error {
-	if err := md.PrimitiveDecode(primType, t); err != nil {
-		return err
-	}
-	return nil
 }
 
 // Instantiate implements TmplNode
@@ -457,14 +431,6 @@ func (t *TmplNumber) AsMap() map[string]any {
 	return m
 }
 
-// FromToml implements TmplNode
-func (t *TmplNumber) FromToml(md toml.MetaData, primType toml.Primitive) error {
-	if err := md.PrimitiveDecode(primType, t); err != nil {
-		return err
-	}
-	return nil
-}
-
 // Instantiate implements TmplNode
 func (t *TmplNumber) Instantiate(gen *Generator, _ int) (any, error) {
 	return gen.randomNumber(t.Minimum, t.Maximum), nil
@@ -491,14 +457,6 @@ func (t *TmplDateTime) AsMap() map[string]any {
 		m["maximum"] = *t.Maximum
 	}
 	return m
-}
-
-// FromToml implements TmplNode
-func (t *TmplDateTime) FromToml(md toml.MetaData, primType toml.Primitive) error {
-	if err := md.PrimitiveDecode(primType, t); err != nil {
-		return err
-	}
-	return nil
 }
 
 // Instantiate implements TmplNode
@@ -807,34 +765,19 @@ func decodeType(md toml.MetaData, primType toml.Primitive) (TmplNode, error) {
 		return nil, err
 	}
 
-	var node TmplNode
-	switch typename {
-	case "string":
-		node = new(TmplString)
-	case "lorem":
-		node = new(TmplLorem)
-	case "book":
-		node = new(TmplBook)
-	case "id":
-		node = new(TmplID)
-	case "ref":
-		node = new(TmplRef)
-	case "number":
-		node = new(TmplNumber)
-	case "date-time":
-		node = new(TmplDateTime)
-	case "array":
-		node = new(TmplArray)
-	case "oneof":
-		node = new(TmplOneOf)
-	case "object":
-		node = new(TmplObject)
-	default:
+	factory := nodeFactories[typename]
+	if factory == nil {
 		return nil, fmt.Errorf("unknown type %v", typename)
 	}
-	if err := node.FromToml(md, primType); err != nil {
+	node := factory()
+	var err error
+	if ft, ok := node.(FromToml); ok {
+		err = ft.FromToml(md, primType)
+	} else {
+		err = md.PrimitiveDecode(primType, node)
+	}
+	if err != nil {
 		return nil, err
 	}
-
 	return node, nil
 }
