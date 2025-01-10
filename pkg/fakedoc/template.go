@@ -242,8 +242,7 @@ func (t *TmplOneOf) AsMap() map[string]any {
 
 // Instantiate implements TmplNode
 func (t *TmplOneOf) Instantiate(gen *Generator, depth int) (any, error) {
-	typename := choose(gen.Rand, t.OneOf)
-	return gen.generateNode(typename, depth-1)
+	return gen.randomOneOf(t.OneOf, depth)
 }
 
 // TmplString describes how to generate strings
