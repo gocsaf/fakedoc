@@ -55,6 +55,11 @@ Guidance on the Size of CSAF Documents.
 	sizeFactorDocumentation = `
 Factor by which to multiply the maxima given in the limits file.
 `
+
+	forceMaxSizeDocumentation = `
+Try to force size of arrays to their maxiumum as defined in the limits
+file and modified by the size factor.
+`
 )
 
 func check(err error) {
@@ -68,6 +73,7 @@ func main() {
 		templatefile string
 		limitsfile   string
 		sizeFactor   float64
+		forceMaxSize bool
 		seed         string
 		outputfile   string
 		numOutputs   int
@@ -77,6 +83,7 @@ func main() {
 	flag.StringVar(&templatefile, "template", "", "template file")
 	flag.StringVar(&limitsfile, "l", "", limitsDocumentation)
 	flag.Float64Var(&sizeFactor, "size", 0.00001, sizeFactorDocumentation)
+	flag.BoolVar(&forceMaxSize, "force-max-size", false, forceMaxSizeDocumentation)
 	flag.StringVar(&seed, "seed", "", seedDocumentation)
 	flag.StringVar(&outputfile, "o", "", outputDocumentation)
 	flag.IntVar(&numOutputs, "n", 1, numOutputDocumentation)
@@ -99,7 +106,7 @@ func main() {
 	check(generate(
 		templatefile, rng,
 		outputfile, limitsfile,
-		sizeFactor,
+		sizeFactor, forceMaxSize,
 		numOutputs, formatted))
 }
 
@@ -107,7 +114,7 @@ func generate(
 	templatefile string,
 	rng *rand.Rand,
 	outputfile, limitsfile string,
-	sizeFactor float64,
+	sizeFactor float64, forceMaxSize bool,
 	numOutputs int,
 	formatted bool,
 ) error {
@@ -131,7 +138,7 @@ func generate(
 		}
 	}
 
-	generator := fakedoc.NewGenerator(templ, limits, sizeFactor, rng)
+	generator := fakedoc.NewGenerator(templ, limits, sizeFactor, forceMaxSize, rng)
 
 	if numOutputs == 1 {
 		return generateToFile(generator, outputfile, formatted)

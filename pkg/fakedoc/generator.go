@@ -53,12 +53,13 @@ var ErrInvalidString = errors.New("not valid utf-8")
 
 // Generator is the type of CSAF document generators
 type Generator struct {
-	Template   *Template
-	Limits     *Limits
-	SizeFactor float64
-	Rand       *rand.Rand
-	FileCache  map[string]string
-	NameSpaces map[string]*NameSpace
+	Template     *Template
+	Limits       *Limits
+	SizeFactor   float64
+	ForceMaxSize bool
+	Rand         *rand.Rand
+	FileCache    map[string]string
+	NameSpaces   map[string]*NameSpace
 }
 
 // NameSpace helps implement TmplID and TmplRef by collecting the IDs
@@ -113,18 +114,20 @@ func NewGenerator(
 	tmpl *Template,
 	limits *Limits,
 	sizeFactor float64,
+	forceMaxSize bool,
 	rng *rand.Rand,
 ) *Generator {
 	if rng == nil {
 		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	}
 	return &Generator{
-		Template:   tmpl,
-		Limits:     limits,
-		SizeFactor: sizeFactor,
-		Rand:       rng,
-		FileCache:  make(map[string]string),
-		NameSpaces: make(map[string]*NameSpace),
+		Template:     tmpl,
+		Limits:       limits,
+		SizeFactor:   sizeFactor,
+		ForceMaxSize: forceMaxSize,
+		Rand:         rng,
+		FileCache:    make(map[string]string),
+		NameSpaces:   make(map[string]*NameSpace),
 	}
 }
 
@@ -241,7 +244,10 @@ func (gen *Generator) randomArray(tmpl *TmplArray, limits *LimitNode, depth int)
 		}
 	}
 
-	length := minitems + gen.Rand.IntN(maxitems-minitems+1)
+	length := maxitems
+	if !gen.ForceMaxSize {
+		length = minitems + gen.Rand.IntN(maxitems-minitems+1)
+	}
 	items := make([]any, 0, length)
 	notInItems := func(v any) bool {
 		if !tmpl.UniqueItems {
