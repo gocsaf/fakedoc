@@ -72,7 +72,7 @@ type TmplNode interface {
 	AsMap() map[string]any
 
 	// Instantiate creates an instance from this template node.
-	Instantiate(gen *Generator, depth int) (any, error)
+	Instantiate(gen *Generator, limits *LimitNode, depth int) (any, error)
 }
 
 // nodeFactories holds a map of node factories.
@@ -186,8 +186,8 @@ func (t *TmplObject) FromToml(md toml.MetaData, primType toml.Primitive) error {
 }
 
 // Instantiate implements TmplNode
-func (t *TmplObject) Instantiate(gen *Generator, depth int) (any, error) {
-	return gen.generateObject(t, depth)
+func (t *TmplObject) Instantiate(gen *Generator, limits *LimitNode, depth int) (any, error) {
+	return gen.generateObject(t, limits, depth)
 }
 
 // TmplArray describes a JSON array
@@ -222,8 +222,8 @@ func (t *TmplArray) AsMap() map[string]any {
 }
 
 // Instantiate implements TmplNode
-func (t *TmplArray) Instantiate(gen *Generator, depth int) (any, error) {
-	return gen.randomArray(t, depth)
+func (t *TmplArray) Instantiate(gen *Generator, limits *LimitNode, depth int) (any, error) {
+	return gen.randomArray(t, limits, depth)
 }
 
 // TmplOneOf describes the choice between multiple types
@@ -241,8 +241,8 @@ func (t *TmplOneOf) AsMap() map[string]any {
 }
 
 // Instantiate implements TmplNode
-func (t *TmplOneOf) Instantiate(gen *Generator, depth int) (any, error) {
-	return gen.randomOneOf(t.OneOf, depth)
+func (t *TmplOneOf) Instantiate(gen *Generator, limits *LimitNode, depth int) (any, error) {
+	return gen.randomOneOf(t.OneOf, limits, depth)
 }
 
 // TmplString describes how to generate strings
@@ -280,7 +280,7 @@ func (t *TmplString) AsMap() map[string]any {
 }
 
 // Instantiate implements TmplNode
-func (t *TmplString) Instantiate(gen *Generator, _ int) (any, error) {
+func (t *TmplString) Instantiate(gen *Generator, _ *LimitNode, _ int) (any, error) {
 	if len(t.Enum) > 0 {
 		return choose(gen.Rand, t.Enum), nil
 	}
@@ -341,7 +341,7 @@ func (t *TmplLorem) AsMap() map[string]any {
 }
 
 // Instantiate implements TmplNode
-func (t *TmplLorem) Instantiate(gen *Generator, _ int) (any, error) {
+func (t *TmplLorem) Instantiate(gen *Generator, _ *LimitNode, _ int) (any, error) {
 	return gen.loremIpsum(t.MinLength, t.MaxLength, t.Unit), nil
 }
 
@@ -363,7 +363,7 @@ func (t *TmplBook) AsMap() map[string]any {
 }
 
 // Instantiate implements TmplNode
-func (t *TmplBook) Instantiate(gen *Generator, _ int) (any, error) {
+func (t *TmplBook) Instantiate(gen *Generator, _ *LimitNode, _ int) (any, error) {
 	return gen.book(t.MinLength, t.MaxLength, t.Path)
 }
 
@@ -383,7 +383,7 @@ func (t *TmplID) AsMap() map[string]any {
 }
 
 // Instantiate implements TmplNode
-func (t *TmplID) Instantiate(gen *Generator, _ int) (any, error) {
+func (t *TmplID) Instantiate(gen *Generator, _ *LimitNode, _ int) (any, error) {
 	return gen.generateID(t.Namespace), nil
 }
 
@@ -403,7 +403,7 @@ func (t *TmplRef) AsMap() map[string]any {
 }
 
 // Instantiate implements TmplNode
-func (t *TmplRef) Instantiate(gen *Generator, _ int) (any, error) {
+func (t *TmplRef) Instantiate(gen *Generator, _ *LimitNode, _ int) (any, error) {
 	return gen.generateReference(t.Namespace)
 }
 
@@ -431,7 +431,7 @@ func (t *TmplNumber) AsMap() map[string]any {
 }
 
 // Instantiate implements TmplNode
-func (t *TmplNumber) Instantiate(gen *Generator, _ int) (any, error) {
+func (t *TmplNumber) Instantiate(gen *Generator, _ *LimitNode, _ int) (any, error) {
 	return gen.randomNumber(t.Minimum, t.Maximum), nil
 }
 
@@ -459,7 +459,7 @@ func (t *TmplDateTime) AsMap() map[string]any {
 }
 
 // Instantiate implements TmplNode
-func (t *TmplDateTime) Instantiate(gen *Generator, _ int) (any, error) {
+func (t *TmplDateTime) Instantiate(gen *Generator, _ *LimitNode, _ int) (any, error) {
 	return gen.randomDateTime(t.Minimum, t.Maximum), nil
 }
 

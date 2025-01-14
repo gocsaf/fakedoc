@@ -86,3 +86,69 @@ func LoadLimitsFromFile(fname string) (*Limits, error) {
 	defer f.Close()
 	return LoadLimitsFromReader(f)
 }
+
+// LimitNode represents a node in the a tree representation of the
+// limits.
+type LimitNode struct {
+	// Limit is the limit for the node
+	Limit int
+	// Branches maps the names of the children to the corresponding
+	// nodes
+	Branches map[string]*LimitNode
+}
+
+// NewLimitNode creates a new, empty node
+func NewLimitNode() *LimitNode {
+	return &LimitNode{
+		Limit:    0,
+		Branches: make(map[string]*LimitNode),
+	}
+}
+
+func (ln *LimitNode) insert(path Path, limit int) {
+	switch {
+	case len(path) == 0:
+		ln.Limit = limit
+	default:
+		node, ok := ln.Branches[path[0].Name]
+		if !ok {
+			node = NewLimitNode()
+			ln.Branches[path[0].Name] = node
+		}
+		node.insert(path[1:], limit)
+	}
+}
+
+// ArrayLimits builds a tree with the limits for the lentgths of arrays.
+// This method can be called on nil, in which case it returns an empty
+// LimitNode
+func (lim *Limits) ArrayLimits() *LimitNode {
+	node := NewLimitNode()
+	if lim == nil {
+		return node
+	}
+	for _, lp := range lim.ArrayLength {
+		for _, path := range lp.Paths {
+			node.insert(path, lp.Length)
+		}
+	}
+	return node
+}
+
+// Descend returns the sub-tree for a child. This method can be called
+// on nil, in which case it also returns nil.
+func (ln *LimitNode) Descend(name string) *LimitNode {
+	if ln == nil {
+		return nil
+	}
+	return ln.Branches[name]
+}
+
+// GetLimit returns the limit associated with the node. It can be called
+// on nil, in which case it returns 0.
+func (ln *LimitNode) GetLimit() int {
+	if ln == nil {
+		return 0
+	}
+	return ln.Limit
+}

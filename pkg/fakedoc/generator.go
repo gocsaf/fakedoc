@@ -55,6 +55,7 @@ var ErrInvalidString = errors.New("not valid utf-8")
 type Generator struct {
 	Template   *Template
 	Limits     *Limits
+	SizeFactor float64
 	Rand       *rand.Rand
 	FileCache  map[string]string
 	NameSpaces map[string]*NameSpace
@@ -111,6 +112,7 @@ func (ref *reference) MarshalJSON() ([]byte, error) {
 func NewGenerator(
 	tmpl *Template,
 	limits *Limits,
+	sizeFactor float64,
 	rng *rand.Rand,
 ) *Generator {
 	if rng == nil {
@@ -119,6 +121,7 @@ func NewGenerator(
 	return &Generator{
 		Template:   tmpl,
 		Limits:     limits,
+		SizeFactor: sizeFactor,
 		Rand:       rng,
 		FileCache:  make(map[string]string),
 		NameSpaces: make(map[string]*NameSpace),
@@ -164,7 +167,8 @@ func (gen *Generator) restoreSnapshot(snapshot map[string]*NameSpace) {
 
 // Generate generates a document
 func (gen *Generator) Generate() (any, error) {
-	doc, err := gen.generateNode(gen.Template.Root, 25)
+	limits := gen.Limits.ArrayLimits()
+	doc, err := gen.generateNode(gen.Template.Root, limits, 25)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +180,7 @@ func (gen *Generator) Generate() (any, error) {
 	return doc, nil
 }
 
-func (gen *Generator) generateNode(typename string, depth int) (_ any, err error) {
+func (gen *Generator) generateNode(typename string, limits *LimitNode, depth int) (_ any, err error) {
 	if depth <= 0 {
 		return nil, ErrDepthExceeded
 	}
@@ -190,7 +194,7 @@ func (gen *Generator) generateNode(typename string, depth int) (_ any, err error
 		}
 	}()
 	if nodeTmpl := gen.Template.Types[typename]; nodeTmpl != nil {
-		return nodeTmpl.Instantiate(gen, depth)
+		return nodeTmpl.Instantiate(gen, limits, depth)
 	}
 	return nil, fmt.Errorf("unknown type %q", typename)
 }
@@ -212,7 +216,7 @@ func (gen *Generator) randomString(minlength, maxlength int) string {
 	return builder.String()
 }
 
-func (gen *Generator) randomArray(tmpl *TmplArray, depth int) (any, error) {
+func (gen *Generator) randomArray(tmpl *TmplArray, limits *LimitNode, depth int) (any, error) {
 	minitems := tmpl.MinItems
 	maxitems := tmpl.MaxItems
 
@@ -220,8 +224,8 @@ func (gen *Generator) randomArray(tmpl *TmplArray, depth int) (any, error) {
 		minitems = 0
 	}
 	if maxitems < 0 {
-		// FIXME: make bound on maximum length configurable
-		maxitems = minitems + 2
+		maxLimit := int(gen.SizeFactor * float64(limits.GetLimit()))
+		maxitems = max(minitems, maxLimit)
 	}
 
 	if refnode, ok := gen.Template.Types[tmpl.Items].(*TmplRef); ok {
@@ -248,7 +252,7 @@ func (gen *Generator) randomArray(tmpl *TmplArray, depth int) (any, error) {
 		})
 	}
 	for range length {
-		item, err := gen.generateItemUntil(tmpl.Items, 10, depth-1, notInItems)
+		item, err := gen.generateItemUntil(tmpl.Items, 10, limits, depth-1, notInItems)
 		switch {
 		case errors.Is(err, ErrNoValidValue):
 			continue
@@ -275,6 +279,7 @@ func (gen *Generator) randomArray(tmpl *TmplArray, depth int) (any, error) {
 func (gen *Generator) generateItemUntil(
 	typename string,
 	maxAttempts int,
+	limits *LimitNode,
 	depth int,
 	cond func(any) bool,
 ) (any, error) {
@@ -286,7 +291,7 @@ func (gen *Generator) generateItemUntil(
 
 generateItem:
 	for range maxAttempts {
-		item, err = gen.generateNode(typename, depth-1)
+		item, err = gen.generateNode(typename, limits, depth-1)
 		switch {
 		case err != nil:
 			return nil, err
@@ -303,11 +308,11 @@ generateItem:
 	return item, nil
 }
 
-func (gen *Generator) randomOneOf(oneof []string, depth int) (any, error) {
+func (gen *Generator) randomOneOf(oneof []string, limits *LimitNode, depth int) (any, error) {
 	shuffled := shuffle(gen.Rand, oneof)
 	var abandoned error
 	for _, typename := range shuffled {
-		value, err := gen.generateNode(typename, depth-1)
+		value, err := gen.generateNode(typename, limits, depth-1)
 		if errors.Is(err, ErrBranchAbandoned) {
 			abandoned = err
 			continue
@@ -321,7 +326,7 @@ func (gen *Generator) randomOneOf(oneof []string, depth int) (any, error) {
 	return nil, fmt.Errorf("could not generate any of %v", oneof)
 }
 
-func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
+func (gen *Generator) generateObject(node *TmplObject, limits *LimitNode, depth int) (any, error) {
 	var optional, required []*Property
 	for _, prop := range node.Properties {
 		switch {
@@ -334,7 +339,7 @@ func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
 
 	properties := make(map[string]any)
 	for _, prop := range required {
-		value, err := gen.generateNode(prop.Type, depth-1)
+		value, err := gen.generateNode(prop.Type, limits.Descend(prop.Name), depth-1)
 		if err != nil {
 			return nil, err
 		}
@@ -373,7 +378,7 @@ func (gen *Generator) generateObject(node *TmplObject, depth int) (any, error) {
 		i := gen.Rand.IntN(len(optional))
 		prop := optional[i]
 		optional = slices.Delete(optional, i, i+1)
-		value, err := gen.generateNode(prop.Type, depth-1)
+		value, err := gen.generateNode(prop.Type, limits.Descend(prop.Name), depth-1)
 		switch {
 		case errors.Is(err, ErrBranchAbandoned):
 			branchAbandoned = err

@@ -51,6 +51,10 @@ Output JSON should be formatted.
 	limitsDocumentation = `
 Guidance on the Size of CSAF Documents.
 `
+
+	sizeFactorDocumentation = `
+Factor by which to multiply the maxima given in the limits file.
+`
 )
 
 func check(err error) {
@@ -63,6 +67,7 @@ func main() {
 	var (
 		templatefile string
 		limitsfile   string
+		sizeFactor   float64
 		seed         string
 		outputfile   string
 		numOutputs   int
@@ -71,6 +76,7 @@ func main() {
 
 	flag.StringVar(&templatefile, "template", "", "template file")
 	flag.StringVar(&limitsfile, "l", "", limitsDocumentation)
+	flag.Float64Var(&sizeFactor, "size", 0.00001, sizeFactorDocumentation)
 	flag.StringVar(&seed, "seed", "", seedDocumentation)
 	flag.StringVar(&outputfile, "o", "", outputDocumentation)
 	flag.IntVar(&numOutputs, "n", 1, numOutputDocumentation)
@@ -93,6 +99,7 @@ func main() {
 	check(generate(
 		templatefile, rng,
 		outputfile, limitsfile,
+		sizeFactor,
 		numOutputs, formatted))
 }
 
@@ -100,6 +107,7 @@ func generate(
 	templatefile string,
 	rng *rand.Rand,
 	outputfile, limitsfile string,
+	sizeFactor float64,
 	numOutputs int,
 	formatted bool,
 ) error {
@@ -123,7 +131,7 @@ func generate(
 		}
 	}
 
-	generator := fakedoc.NewGenerator(templ, limits, rng)
+	generator := fakedoc.NewGenerator(templ, limits, sizeFactor, rng)
 
 	if numOutputs == 1 {
 		return generateToFile(generator, outputfile, formatted)
