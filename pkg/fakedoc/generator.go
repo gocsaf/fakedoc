@@ -9,10 +9,14 @@
 package fakedoc
 
 import (
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
+	"log"
+	"maps"
 	"math"
 	"math/rand/v2"
 	"os"
@@ -92,18 +96,18 @@ func (ns *NameSpace) snapshot() *NameSpace {
 // it's a slice of references serialized as a JSON array of strings.
 // The length field indicates which variant it is.
 type reference struct {
-	namespace string
-	// length is less than zero to indicate a single reference, greater
+	Namespace string
+	// Length is less than zero to indicate a single reference, greater
 	// or equal to zero to indicate an array
-	length int
-	values []string
+	Length int
+	Values []string
 }
 
 func (ref *reference) MarshalJSON() ([]byte, error) {
-	if ref.length < 0 {
-		return json.Marshal(ref.values[0])
+	if ref.Length < 0 {
+		return json.Marshal(ref.Values[0])
 	}
-	return json.Marshal(ref.values)
+	return json.Marshal(ref.Values)
 }
 
 // NewGenerator creates a new Generator based on a Template and an
@@ -219,6 +223,46 @@ func (gen *Generator) randomString(minlength, maxlength int) string {
 	return builder.String()
 }
 
+func init() {
+	gob.Register(time.Time{})
+	gob.Register(reference{})
+	gob.Register([]any{})
+}
+
+func demap(v any) any {
+	switch a := v.(type) {
+	case map[string]any:
+		keys := slices.Sorted(maps.Keys(a))
+		pairs := make([]any, 0, len(keys)*2)
+		for _, key := range keys {
+			pairs = append(pairs, key, demap(a[key]))
+		}
+		return pairs
+	case []any:
+		b := make([]any, 0, len(a))
+		for _, i := range a {
+			b = append(b, demap(i))
+		}
+		return b
+	default:
+		return v
+	}
+}
+
+func itemHasher() func(any) uint64 {
+	hash := fnv.New64()
+	return func(v any) uint64 {
+		v = demap(v)
+		hash.Reset()
+		enc := gob.NewEncoder(hash)
+		if err := enc.Encode(v); err != nil {
+			log.Printf("encoding failed: %v\n", err)
+			return 0
+		}
+		return hash.Sum64()
+	}
+}
+
 func (gen *Generator) randomArray(tmpl *TmplArray, limits *LimitNode, depth int) (any, error) {
 	minitems := tmpl.MinItems
 	maxitems := tmpl.MaxItems
@@ -235,9 +279,9 @@ func (gen *Generator) randomArray(tmpl *TmplArray, limits *LimitNode, depth int)
 		known := gen.numNSValues(refnode.Namespace)
 		if known >= minitems && tmpl.UniqueItems {
 			ref := &reference{
-				namespace: refnode.Namespace,
-				length:    minitems + gen.Rand.IntN(known-minitems+1),
-				values:    nil,
+				Namespace: refnode.Namespace,
+				Length:    minitems + gen.Rand.IntN(known-minitems+1),
+				Values:    nil,
 			}
 			gen.adNSRef(refnode.Namespace, ref)
 			return ref, nil
@@ -249,13 +293,22 @@ func (gen *Generator) randomArray(tmpl *TmplArray, limits *LimitNode, depth int)
 		length = minitems + gen.Rand.IntN(maxitems-minitems+1)
 	}
 	items := make([]any, 0, length)
+
+	var (
+		hashes map[uint64][]any
+		hasher func(any) uint64
+	)
+
+	if tmpl.UniqueItems {
+		hashes = map[uint64][]any{}
+		hasher = itemHasher()
+	}
+
 	notInItems := func(v any) bool {
-		if !tmpl.UniqueItems {
-			return true
-		}
-		return !slices.ContainsFunc(items, func(item any) bool {
-			return reflect.DeepEqual(item, v)
-		})
+		return hashes == nil ||
+			!slices.ContainsFunc(hashes[hasher(v)], func(item any) bool {
+				return reflect.DeepEqual(item, v)
+			})
 	}
 	for range length {
 		item, err := gen.generateItemUntil(tmpl.Items, 10, limits, depth-1, notInItems)
@@ -266,6 +319,10 @@ func (gen *Generator) randomArray(tmpl *TmplArray, limits *LimitNode, depth int)
 			return nil, err
 		}
 		items = append(items, item)
+		if hashes != nil {
+			key := hasher(item)
+			hashes[key] = append(hashes[key], item)
+		}
 	}
 
 	if len(items) < minitems {
@@ -514,9 +571,9 @@ func (gen *Generator) generateReference(namespace string) (any, error) {
 	}
 
 	ref := &reference{
-		namespace: namespace,
-		length:    -1,
-		values:    nil,
+		Namespace: namespace,
+		Length:    -1,
+		Values:    nil,
 	}
 	gen.adNSRef(namespace, ref)
 	return ref, nil
@@ -534,12 +591,12 @@ func (gen *Generator) fixupReferences() error {
 		}
 		for _, ref := range ns.Refs {
 			switch {
-			case ref.length < 0:
-				ref.values = []string{choose(gen.Rand, ns.Values)}
-			case ref.length == 0:
-				ref.values = nil
+			case ref.Length < 0:
+				ref.Values = []string{choose(gen.Rand, ns.Values)}
+			case ref.Length == 0:
+				ref.Values = nil
 			default:
-				ref.values = chooseK(gen.Rand, ref.length, ns.Values)
+				ref.Values = chooseK(gen.Rand, ref.Length, ns.Values)
 			}
 		}
 	}
