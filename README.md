@@ -51,6 +51,22 @@ named `csaf-0.json` through `csaf-99.json`:
 go run cmd/fakedoc/main.go --template template.toml -n 100 -o 'csaf-{{$}}.json'
 ```
 
+To generate large documents, one can use the something like this:
+
+``` shell
+go run cmd/fakedoc/main.go -o random-csaf.json -l limits.json --force-max-size
+```
+
+With the `-l limits.json` option, fakedoc loads information about the
+maximum lengths of arrays, strings and URIs from the `limits.json` file.
+If loaded the maximum lenghts of arrays are taken from this file (it's
+only implemented for arrays so far). By default these maximum values are
+multiplied by 0.00001 to avoid generating exceedingly large files. This
+factor can be set with the `--size` option. With the `--force-max-size`
+option, fakedoc tries to make arrays as large as their maximum length.
+
+How big the files will actually be depends not only on the length of the
+arrays but also on which parts of the document are actually generated. 
 
 
 ## License
