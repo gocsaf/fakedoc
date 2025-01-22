@@ -44,26 +44,22 @@ func shuffle[T any](rand *rand.Rand, ts []T) []T {
 // ErrSeedFormat is the error returned by ParseSeed for incorrectly
 // formatted seed values.
 var ErrSeedFormat = errors.New(
-	"seed doesn't match format 'pcg:<1-8 hex digits>:<1-8 hex digits>'",
+	"seed doesn't match format 'pcg:<1-16 hex digits>:<1-16 hex digits>'",
 )
 
-var seedPattern = regexp.MustCompile("^pcg:([0-9a-fA-F]{1,8}):([0-9a-fA-F]{1,8})$")
+var seedPattern = regexp.MustCompile("^pcg:([0-9a-fA-F]{1,16}):([0-9a-fA-F]{1,16})$")
 
 // ParseSeed parses a seed from a string and returns the resulting
 // random number generator
 func ParseSeed(seed string) (*rand.Rand, error) {
-	matches := seedPattern.FindAllStringSubmatch(seed, -1)
-	if len(matches) == 0 {
+	matches := seedPattern.FindStringSubmatch(seed)
+	if matches == nil {
 		return nil, ErrSeedFormat
 	}
-	s1, err := strconv.ParseUint(matches[0][1], 16, 64)
-	if err != nil {
+	s1, err1 := strconv.ParseUint(matches[1], 16, 64)
+	s2, err2 := strconv.ParseUint(matches[2], 16, 64)
+	if err := errors.Join(err1, err2); err != nil {
 		return nil, err
 	}
-	s2, err := strconv.ParseUint(matches[0][2], 16, 64)
-	if err != nil {
-		return nil, err
-	}
-
 	return rand.New(rand.NewPCG(s1, s2)), nil
 }

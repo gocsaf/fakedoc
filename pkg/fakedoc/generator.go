@@ -122,7 +122,9 @@ func NewGenerator(
 	rng *rand.Rand,
 ) *Generator {
 	if rng == nil {
-		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+		seed1, seed2 := rand.Uint64(), rand.Uint64()
+		fmt.Fprintf(os.Stderr, "pcg:%x:%x\n", seed1, seed2)
+		rng = rand.New(rand.NewPCG(seed1, seed2))
 	}
 	return &Generator{
 		Template:     tmpl,

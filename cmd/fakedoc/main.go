@@ -28,7 +28,7 @@ import (
 
 const (
 	seedDocumentation = `
-random number seed, format 'pcg:<1-8 hex digits>:<1-8 hex digits>'.
+random number seed, format 'pcg:<1-16 hex digits>:<1-16 hex digits>'.
 If omitted, the generator uses a random seed.
 `
 
