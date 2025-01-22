@@ -299,19 +299,21 @@ func (gen *Generator) randomArray(tmpl *TmplArray, limits *LimitNode, depth int)
 	var (
 		hashes map[uint64][]any
 		hasher func(any) uint64
+		key    uint64
 	)
 
+	var notInItems func(any) bool
 	if tmpl.UniqueItems {
 		hashes = map[uint64][]any{}
 		hasher = itemHasher()
-	}
-
-	notInItems := func(v any) bool {
-		return hashes == nil ||
-			!slices.ContainsFunc(hashes[hasher(v)], func(item any) bool {
+		notInItems = func(v any) bool {
+			key = hasher(v)
+			return !slices.ContainsFunc(hashes[key], func(item any) bool {
 				return reflect.DeepEqual(item, v)
 			})
+		}
 	}
+
 	for range length {
 		item, err := gen.generateItemUntil(tmpl.Items, 10, limits, depth-1, notInItems)
 		switch {
@@ -322,7 +324,6 @@ func (gen *Generator) randomArray(tmpl *TmplArray, limits *LimitNode, depth int)
 		}
 		items = append(items, item)
 		if hashes != nil {
-			key := hasher(item)
 			hashes[key] = append(hashes[key], item)
 		}
 	}
@@ -348,29 +349,16 @@ func (gen *Generator) generateItemUntil(
 	depth int,
 	cond func(any) bool,
 ) (any, error) {
-	var (
-		item    any
-		err     error
-		success bool
-	)
-
-generateItem:
 	for range maxAttempts {
-		item, err = gen.generateNode(typename, limits, depth-1)
-		switch {
-		case err != nil:
+		item, err := gen.generateNode(typename, limits, depth-1)
+		if err != nil {
 			return nil, err
-		case !cond(item):
-			continue
-		default:
-			success = true
-			break generateItem
+		}
+		if cond == nil || cond(item) {
+			return item, nil
 		}
 	}
-	if !success {
-		return nil, ErrNoValidValue
-	}
-	return item, nil
+	return nil, ErrNoValidValue
 }
 
 func (gen *Generator) randomOneOf(oneof []string, limits *LimitNode, depth int) (any, error) {
