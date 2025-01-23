@@ -9,20 +9,20 @@
 package fakedoc
 
 import (
-	"encoding/gob"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"hash/fnv"
 	"io"
-	"log"
-	"maps"
 	"math"
 	"math/rand/v2"
 	"os"
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -225,43 +225,45 @@ func (gen *Generator) randomString(minlength, maxlength int) string {
 	return builder.String()
 }
 
-func init() {
-	gob.Register(time.Time{})
-	gob.Register(reference{})
-	gob.Register([]any{})
+var sortPool = sync.Pool{
+	New: func() any { return make([]string, 0, 4) },
 }
 
-func demap(v any) any {
-	switch a := v.(type) {
-	case map[string]any:
-		keys := slices.Sorted(maps.Keys(a))
-		pairs := make([]any, 0, len(keys)*2)
-		for _, key := range keys {
-			pairs = append(pairs, key, demap(a[key]))
-		}
-		return pairs
+func hashing(v any, h hash.Hash64) {
+	switch x := v.(type) {
+	case string:
+		binary.Write(h, binary.NativeEndian, x)
 	case []any:
-		b := make([]any, 0, len(a))
-		for _, i := range a {
-			b = append(b, demap(i))
+		binary.Write(h, binary.NativeEndian, int32(len(x)))
+		for _, y := range x {
+			hashing(y, h)
 		}
-		return b
+	case time.Time:
+		if data, err := x.MarshalBinary(); err == nil {
+			h.Write(data)
+		}
+	case *reference:
+		binary.Write(h, binary.NativeEndian, x.Namespace)
+		binary.Write(h, binary.NativeEndian, int32(x.Length))
+		binary.Write(h, binary.NativeEndian, int32(len(x.Values)))
+		for _, y := range x.Values {
+			binary.Write(h, binary.NativeEndian, y)
+		}
+	case map[string]any:
+		binary.Write(h, binary.NativeEndian, int32(len(x)))
+		keys := sortPool.Get().([]string)
+		for key := range x {
+			keys = append(keys, key)
+		}
+		slices.Sort(keys)
+		for _, key := range keys {
+			binary.Write(h, binary.NativeEndian, key)
+			hashing(x[key], h)
+		}
+		clear(keys)
+		sortPool.Put(keys[:0])
 	default:
-		return v
-	}
-}
-
-func itemHasher() func(any) uint64 {
-	hash := fnv.New64()
-	return func(v any) uint64 {
-		v = demap(v)
-		hash.Reset()
-		enc := gob.NewEncoder(hash)
-		if err := enc.Encode(v); err != nil {
-			log.Printf("encoding failed: %v\n", err)
-			return 0
-		}
-		return hash.Sum64()
+		panic(fmt.Sprintf("unkown type: %T", v))
 	}
 }
 
@@ -298,16 +300,18 @@ func (gen *Generator) randomArray(tmpl *TmplArray, limits *LimitNode, depth int)
 
 	var (
 		hashes map[uint64][]any
-		hasher func(any) uint64
+		hash   hash.Hash64
 		key    uint64
 	)
 
 	var notInItems func(any) bool
 	if tmpl.UniqueItems {
 		hashes = map[uint64][]any{}
-		hasher = itemHasher()
+		hash = fnv.New64()
 		notInItems = func(v any) bool {
-			key = hasher(v)
+			hash.Reset()
+			hashing(v, hash)
+			key = hash.Sum64()
 			return !slices.ContainsFunc(hashes[key], func(item any) bool {
 				return reflect.DeepEqual(item, v)
 			})
