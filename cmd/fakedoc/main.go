@@ -88,26 +88,24 @@ func main() {
 	flag.StringVar(&outputfile, "o", "", outputDocumentation)
 	flag.IntVar(&numOutputs, "n", 1, numOutputDocumentation)
 	flag.BoolVar(&formatted, "f", false, formattedDocumentation)
+	// Only used when compiled with 'profile' tag.
+	pf := addProfileFlags()
 	flag.Parse()
 
 	if numOutputs > 1 && outputfile == "" {
 		log.Fatal("Multiple outputs require an explicit output file template")
 	}
 
-	var (
-		rng *rand.Rand
-		err error
-	)
-	if seed != "" {
-		rng, err = fakedoc.ParseSeed(seed)
-		check(err)
-	}
+	rng, err := fakedoc.ParseSeed(seed)
+	check(err)
 
-	check(generate(
-		templatefile, rng,
-		outputfile, limitsfile,
-		sizeFactor, forceMaxSize,
-		numOutputs, formatted))
+	check(pf.profile(func() error {
+		return generate(
+			templatefile, rng,
+			outputfile, limitsfile,
+			sizeFactor, forceMaxSize,
+			numOutputs, formatted)
+	}))
 }
 
 func generate(

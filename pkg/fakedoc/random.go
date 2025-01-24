@@ -50,8 +50,12 @@ var ErrSeedFormat = errors.New(
 var seedPattern = regexp.MustCompile("^pcg:([0-9a-fA-F]{1,16}):([0-9a-fA-F]{1,16})$")
 
 // ParseSeed parses a seed from a string and returns the resulting
-// random number generator
+// random number generator.
+// If the seed string is empty nil is returned.
 func ParseSeed(seed string) (*rand.Rand, error) {
+	if seed == "" {
+		return nil, nil
+	}
 	matches := seedPattern.FindStringSubmatch(seed)
 	if matches == nil {
 		return nil, ErrSeedFormat
