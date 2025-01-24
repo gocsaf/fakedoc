@@ -235,7 +235,7 @@ var sortPool = sync.Pool{
 func hashing(v any, h hash.Hash64) {
 	switch x := v.(type) {
 	case string:
-		h.Write([]byte(x))
+		io.WriteString(h, x)
 	case []any:
 		binary.Write(h, binary.NativeEndian, int32(len(x)))
 		for _, y := range x {
@@ -246,11 +246,11 @@ func hashing(v any, h hash.Hash64) {
 			h.Write(data)
 		}
 	case *reference:
-		h.Write([]byte(x.Namespace))
+		io.WriteString(h, x.Namespace)
 		binary.Write(h, binary.NativeEndian, int32(x.Length))
 		binary.Write(h, binary.NativeEndian, int32(len(x.Values)))
 		for _, y := range x.Values {
-			h.Write([]byte(y))
+			io.WriteString(h, y)
 		}
 	case map[string]any:
 		binary.Write(h, binary.NativeEndian, int32(len(x)))
@@ -260,7 +260,7 @@ func hashing(v any, h hash.Hash64) {
 		}
 		slices.Sort(keys)
 		for _, key := range keys {
-			h.Write([]byte(key))
+			io.WriteString(h, key)
 			hashing(x[key], h)
 		}
 		clear(keys)
