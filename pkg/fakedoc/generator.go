@@ -226,13 +226,16 @@ func (gen *Generator) randomString(minlength, maxlength int) string {
 }
 
 var sortPool = sync.Pool{
-	New: func() any { return make([]string, 0, 4) },
+	New: func() any {
+		arr := make([]string, 0, 4)
+		return &arr
+	},
 }
 
 func hashing(v any, h hash.Hash64) {
 	switch x := v.(type) {
 	case string:
-		binary.Write(h, binary.NativeEndian, x)
+		h.Write([]byte(x))
 	case []any:
 		binary.Write(h, binary.NativeEndian, int32(len(x)))
 		for _, y := range x {
@@ -243,25 +246,26 @@ func hashing(v any, h hash.Hash64) {
 			h.Write(data)
 		}
 	case *reference:
-		binary.Write(h, binary.NativeEndian, x.Namespace)
+		h.Write([]byte(x.Namespace))
 		binary.Write(h, binary.NativeEndian, int32(x.Length))
 		binary.Write(h, binary.NativeEndian, int32(len(x.Values)))
 		for _, y := range x.Values {
-			binary.Write(h, binary.NativeEndian, y)
+			h.Write([]byte(y))
 		}
 	case map[string]any:
 		binary.Write(h, binary.NativeEndian, int32(len(x)))
-		keys := sortPool.Get().([]string)
+		keys := *sortPool.Get().(*[]string)
 		for key := range x {
 			keys = append(keys, key)
 		}
 		slices.Sort(keys)
 		for _, key := range keys {
-			binary.Write(h, binary.NativeEndian, key)
+			h.Write([]byte(key))
 			hashing(x[key], h)
 		}
 		clear(keys)
-		sortPool.Put(keys[:0])
+		keys = keys[:0]
+		sortPool.Put(&keys)
 	default:
 		panic(fmt.Sprintf("unkown type: %T", v))
 	}
