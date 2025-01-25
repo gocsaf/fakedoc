@@ -294,15 +294,15 @@ func (gen *Generator) randomArray(tmpl *TmplArray, limits *LimitNode, depth int)
 	if !gen.ForceMaxSize {
 		length = minitems + gen.Rand.IntN(maxitems-minitems+1)
 	}
-	items := make([]any, 0, length)
 
 	var (
-		hashes map[uint64][]any
-		hasher func(any) uint64
-		key    uint64
+		items      []any
+		hashes     map[uint64][]any
+		hasher     func(any) uint64
+		key        uint64
+		notInItems func(any) bool
 	)
 
-	var notInItems func(any) bool
 	if tmpl.UniqueItems {
 		hashes = map[uint64][]any{}
 		hasher = itemHasher()
@@ -321,6 +321,17 @@ func (gen *Generator) randomArray(tmpl *TmplArray, limits *LimitNode, depth int)
 			continue
 		case err != nil:
 			return nil, err
+		}
+		if items == nil {
+			// We alloc the items slice here to tame the GC.
+			// If we pre-alloc it before the loop and an error occurrs
+			// the GC is having a bad/hard time to free the memory as the
+			// randomArray method is called at a high rate and the slices
+			// tend to be large.
+			// It is observed that the errors occurr mainly with the
+			// creation of the first item so we delay the allocation
+			// after this point.
+			items = make([]any, 0, length)
 		}
 		items = append(items, item)
 		if hashes != nil {
