@@ -230,6 +230,8 @@ func writeInt32(v int32, h hash.Hash64) {
 	h.Write(buf[:])
 }
 
+// hashing is used to create a 64 bit hash value for
+// a generated item to speed up unique checks.
 func hashing(v any, h hash.Hash64) {
 	switch x := v.(type) {
 	case string:
@@ -252,6 +254,7 @@ func hashing(v any, h hash.Hash64) {
 		}
 	case map[string]any:
 		writeInt32(int32(len(x)), h)
+		// keys := slices.Sorted(maps.Keys(x)) is slower!
 		keys := make([]string, 0, len(x))
 		for key := range x {
 			keys = append(keys, key)
