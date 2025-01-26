@@ -224,12 +224,18 @@ func (gen *Generator) randomString(minlength, maxlength int) string {
 	return builder.String()
 }
 
+func writeInt32(v int32, h hash.Hash64) {
+	var buf [4]byte
+	binary.NativeEndian.PutUint32(buf[:], uint32(v))
+	h.Write(buf[:])
+}
+
 func hashing(v any, h hash.Hash64) {
 	switch x := v.(type) {
 	case string:
 		io.WriteString(h, x)
 	case []any:
-		binary.Write(h, binary.NativeEndian, int32(len(x)))
+		writeInt32(int32(len(x)), h)
 		for _, y := range x {
 			hashing(y, h)
 		}
@@ -239,13 +245,13 @@ func hashing(v any, h hash.Hash64) {
 		}
 	case *reference:
 		io.WriteString(h, x.Namespace)
-		binary.Write(h, binary.NativeEndian, int32(x.Length))
-		binary.Write(h, binary.NativeEndian, int32(len(x.Values)))
+		writeInt32(int32(x.Length), h)
+		writeInt32(int32(len(x.Values)), h)
 		for _, y := range x.Values {
 			io.WriteString(h, y)
 		}
 	case map[string]any:
-		binary.Write(h, binary.NativeEndian, int32(len(x)))
+		writeInt32(int32(len(x)), h)
 		keys := make([]string, 0, len(x))
 		for key := range x {
 			keys = append(keys, key)
@@ -255,8 +261,6 @@ func hashing(v any, h hash.Hash64) {
 			io.WriteString(h, key)
 			hashing(x[key], h)
 		}
-		clear(keys)
-		keys = keys[:0]
 	default:
 		panic(fmt.Sprintf("unkown type: %T", v))
 	}
