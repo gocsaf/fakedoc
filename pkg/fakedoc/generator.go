@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -57,13 +58,21 @@ var ErrInvalidString = errors.New("not valid utf-8")
 
 // Generator is the type of CSAF document generators
 type Generator struct {
-	Template     *Template
-	Limits       *Limits
-	SizeFactor   float64
-	ForceMaxSize bool
-	Rand         *rand.Rand
-	FileCache    map[string]string
-	NameSpaces   map[string]*NameSpace
+	Template        *Template
+	Limits          *Limits
+	SizeFactor      float64
+	ForceMaxSize    bool
+	Rand            *rand.Rand
+	FileCache       map[string]string
+	NameSpaces      map[string]*NameSpace
+	snapshotTime    uint64
+	namespaceIDErrs map[string]error
+}
+
+type namespaceSnapshot struct {
+	valuesLen int
+	refsLen   int
+	time      uint64
 }
 
 // NameSpace helps implement TmplID and TmplRef by collecting the IDs
@@ -71,8 +80,70 @@ type Generator struct {
 // so that the references can be set to actually existing IDs once all
 // IDs have been generated
 type NameSpace struct {
-	Values []string
-	Refs   []*reference
+	Values    []string
+	Refs      []*reference
+	snapshots []namespaceSnapshot
+	created   uint64
+}
+
+// namespacePool helps to recycle namespaces.
+var namespacePool = sync.Pool{
+	New: func() any { return new(NameSpace) },
+}
+
+func (ns *NameSpace) snapshot(time uint64) {
+	var add bool // only take a new snapshot if something has changed.
+	if n := len(ns.snapshots); n == 0 {
+		add = true
+	} else {
+		last := &ns.snapshots[n-1]
+		add = last.refsLen != len(ns.Refs) || last.valuesLen != len(ns.Values)
+	}
+	if add {
+		ns.snapshots = append(ns.snapshots, namespaceSnapshot{
+			time:      time,
+			valuesLen: len(ns.Values),
+			refsLen:   len(ns.Refs),
+		})
+	}
+}
+
+func (ns *NameSpace) restoreSnapshot(time uint64) {
+	for i := len(ns.snapshots) - 1; i >= 0; i-- {
+		s := &ns.snapshots[i]
+		if s.time < time {
+			break
+		}
+		clear(ns.Values[s.valuesLen:])
+		ns.Values = ns.Values[:s.valuesLen]
+		clear(ns.Refs[s.refsLen:])
+		ns.Refs = ns.Refs[:s.refsLen]
+		ns.snapshots = ns.snapshots[:i]
+	}
+}
+
+func (gen *Generator) snapshotNamespaces() uint64 {
+	old := gen.snapshotTime
+	gen.snapshotTime++
+	for _, ns := range gen.NameSpaces {
+		ns.snapshot(old)
+	}
+	return old
+}
+
+func (gen *Generator) restoreNamespaceSnapshot(time uint64) {
+	for name, ns := range gen.NameSpaces {
+		if ns.created > time {
+			// It wasn't there when taken.
+			delete(gen.NameSpaces, name)
+			// Recyle it as they are created frequently.
+			*ns = NameSpace{}
+			namespacePool.Put(ns)
+		} else {
+			ns.restoreSnapshot(time)
+		}
+	}
+	gen.snapshotTime = time
 }
 
 func (ns *NameSpace) addValue(v string) {
@@ -81,13 +152,6 @@ func (ns *NameSpace) addValue(v string) {
 
 func (ns *NameSpace) addRef(r *reference) {
 	ns.Refs = append(ns.Refs, r)
-}
-
-func (ns *NameSpace) snapshot() *NameSpace {
-	return &NameSpace{
-		Values: ns.Values,
-		Refs:   ns.Refs,
-	}
 }
 
 // reference is the value of a node created for TmplRef or arrays of
@@ -127,21 +191,25 @@ func NewGenerator(
 		rng = rand.New(rand.NewPCG(seed1, seed2))
 	}
 	return &Generator{
-		Template:     tmpl,
-		Limits:       limits,
-		SizeFactor:   sizeFactor,
-		ForceMaxSize: forceMaxSize,
-		Rand:         rng,
-		FileCache:    make(map[string]string),
-		NameSpaces:   make(map[string]*NameSpace),
+		Template:        tmpl,
+		Limits:          limits,
+		SizeFactor:      sizeFactor,
+		ForceMaxSize:    forceMaxSize,
+		Rand:            rng,
+		FileCache:       map[string]string{},
+		NameSpaces:      map[string]*NameSpace{},
+		namespaceIDErrs: map[string]error{},
 	}
 }
 
-func (gen *Generator) getNamespace(namespace string) *NameSpace {
-	if _, ok := gen.NameSpaces[namespace]; !ok {
-		gen.NameSpaces[namespace] = &NameSpace{}
+func (gen *Generator) getNamespace(name string) *NameSpace {
+	ns := gen.NameSpaces[name]
+	if ns == nil {
+		ns = namespacePool.Get().(*NameSpace)
+		ns.created = gen.snapshotTime
+		gen.NameSpaces[name] = ns
 	}
-	return gen.NameSpaces[namespace]
+	return ns
 }
 
 // addNSValue adds a value to a namespace
@@ -160,18 +228,6 @@ func (gen *Generator) hasNSValues(namespace string) bool {
 
 func (gen *Generator) numNSValues(namespace string) int {
 	return len(gen.getNamespace(namespace).Values)
-}
-
-func (gen *Generator) snapshotNamespaces() map[string]*NameSpace {
-	snap := make(map[string]*NameSpace, len(gen.NameSpaces))
-	for name, ns := range gen.NameSpaces {
-		snap[name] = ns.snapshot()
-	}
-	return snap
-}
-
-func (gen *Generator) restoreSnapshot(snapshot map[string]*NameSpace) {
-	gen.NameSpaces = snapshot
 }
 
 // Generate generates a document
@@ -199,7 +255,7 @@ func (gen *Generator) generateNode(typename string, limits *LimitNode, depth int
 	snapshot := gen.snapshotNamespaces()
 	defer func() {
 		if errors.Is(err, ErrBranchAbandoned) {
-			gen.restoreSnapshot(snapshot)
+			gen.restoreNamespaceSnapshot(snapshot)
 		}
 	}()
 	if nodeTmpl := gen.Template.Types[typename]; nodeTmpl != nil {
@@ -324,11 +380,11 @@ func (gen *Generator) randomArray(tmpl *TmplArray, limits *LimitNode, depth int)
 		}
 		if items == nil {
 			// We alloc the items slice here to tame the GC.
-			// If we pre-alloc it before the loop and an error occurrs
+			// If we pre-alloc it before the loop and an error occurs
 			// the GC is having a bad/hard time to free the memory as the
 			// randomArray method is called at a high rate and the slices
 			// tend to be large.
-			// It is observed that the errors occurr mainly with the
+			// It is observed that the errors occur mainly with the
 			// creation of the first item so we delay the allocation
 			// after this point.
 			items = make([]any, 0, length)
@@ -566,9 +622,15 @@ func (gen *Generator) generateID(namespace string) string {
 
 func (gen *Generator) generateReference(namespace string) (any, error) {
 	if !gen.hasNSValues(namespace) {
-		return nil, fmt.Errorf(
-			"%w: no IDs in namespace %q", ErrBranchAbandoned, namespace,
-		)
+		// These errors occur quiet often so it is cheaper
+		// to cache them for reuse.
+		err := gen.namespaceIDErrs[namespace]
+		if err == nil {
+			err = fmt.Errorf(
+				"%w: no IDs in namespace %q", ErrBranchAbandoned, namespace)
+			gen.namespaceIDErrs[namespace] = err
+		}
+		return nil, err
 	}
 
 	ref := &reference{
