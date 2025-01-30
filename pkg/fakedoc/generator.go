@@ -9,14 +9,13 @@
 package fakedoc
 
 import (
-	"encoding/gob"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"hash/fnv"
 	"io"
-	"log"
-	"maps"
 	"math"
 	"math/rand/v2"
 	"os"
@@ -225,43 +224,48 @@ func (gen *Generator) randomString(minlength, maxlength int) string {
 	return builder.String()
 }
 
-func init() {
-	gob.Register(time.Time{})
-	gob.Register(reference{})
-	gob.Register([]any{})
+func writeInt32(v int32, h hash.Hash64) {
+	var buf [4]byte
+	binary.NativeEndian.PutUint32(buf[:], uint32(v))
+	h.Write(buf[:])
 }
 
-func demap(v any) any {
-	switch a := v.(type) {
-	case map[string]any:
-		keys := slices.Sorted(maps.Keys(a))
-		pairs := make([]any, 0, len(keys)*2)
-		for _, key := range keys {
-			pairs = append(pairs, key, demap(a[key]))
-		}
-		return pairs
+// hashing is used to create a 64 bit hash value for
+// a generated item to speed up unique checks.
+func hashing(v any, h hash.Hash64) {
+	switch x := v.(type) {
+	case string:
+		io.WriteString(h, x)
 	case []any:
-		b := make([]any, 0, len(a))
-		for _, i := range a {
-			b = append(b, demap(i))
+		writeInt32(int32(len(x)), h)
+		for _, y := range x {
+			hashing(y, h)
 		}
-		return b
+	case time.Time:
+		if data, err := x.MarshalBinary(); err == nil {
+			h.Write(data)
+		}
+	case *reference:
+		io.WriteString(h, x.Namespace)
+		writeInt32(int32(x.Length), h)
+		writeInt32(int32(len(x.Values)), h)
+		for _, y := range x.Values {
+			io.WriteString(h, y)
+		}
+	case map[string]any:
+		writeInt32(int32(len(x)), h)
+		// keys := slices.Sorted(maps.Keys(x)) is slower!
+		keys := make([]string, 0, len(x))
+		for key := range x {
+			keys = append(keys, key)
+		}
+		slices.Sort(keys)
+		for _, key := range keys {
+			io.WriteString(h, key)
+			hashing(x[key], h)
+		}
 	default:
-		return v
-	}
-}
-
-func itemHasher() func(any) uint64 {
-	hash := fnv.New64()
-	return func(v any) uint64 {
-		v = demap(v)
-		hash.Reset()
-		enc := gob.NewEncoder(hash)
-		if err := enc.Encode(v); err != nil {
-			log.Printf("encoding failed: %v\n", err)
-			return 0
-		}
-		return hash.Sum64()
+		panic(fmt.Sprintf("unkown type: %T", v))
 	}
 }
 
@@ -297,17 +301,19 @@ func (gen *Generator) randomArray(tmpl *TmplArray, limits *LimitNode, depth int)
 
 	var (
 		items      []any
+		hash       hash.Hash64
 		hashes     map[uint64][]any
-		hasher     func(any) uint64
 		key        uint64
 		notInItems func(any) bool
 	)
 
 	if tmpl.UniqueItems {
 		hashes = map[uint64][]any{}
-		hasher = itemHasher()
+		hash = fnv.New64()
 		notInItems = func(v any) bool {
-			key = hasher(v)
+			hash.Reset()
+			hashing(v, hash)
+			key = hash.Sum64()
 			return !slices.ContainsFunc(hashes[key], func(item any) bool {
 				return reflect.DeepEqual(item, v)
 			})
