@@ -341,8 +341,8 @@ func (t *TmplLorem) AsMap() map[string]any {
 }
 
 // Instantiate implements TmplNode
-func (t *TmplLorem) Instantiate(gen *Generator, _ *LimitNode, _ int) (any, error) {
-	return gen.loremIpsum(t.MinLength, t.MaxLength, t.Unit), nil
+func (t *TmplLorem) Instantiate(gen *Generator, limits *LimitNode, _ int) (any, error) {
+	return gen.loremIpsum(t.MinLength, t.MaxLength, t.Unit, limits), nil
 }
 
 // AsMap implements TmplNode
@@ -363,8 +363,8 @@ func (t *TmplBook) AsMap() map[string]any {
 }
 
 // Instantiate implements TmplNode
-func (t *TmplBook) Instantiate(gen *Generator, _ *LimitNode, _ int) (any, error) {
-	return gen.book(t.MinLength, t.MaxLength, t.Path)
+func (t *TmplBook) Instantiate(gen *Generator, limits *LimitNode, _ int) (any, error) {
+	return gen.book(t.MinLength, t.MaxLength, t.Path, limits)
 }
 
 // TmplID describes how to generate IDs that may be referenced from

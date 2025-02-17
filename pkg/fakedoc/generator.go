@@ -337,7 +337,10 @@ func (gen *Generator) randomArray(tmpl *TmplArray, limits *LimitNode, depth int)
 		minitems = 0
 	}
 	if maxitems < 0 {
-		maxLimit := int(gen.SizeFactor * float64(limits.GetLimit()))
+		maxLimit := limits.GetLimit()
+		if !gen.ForceMaxSize {
+			maxLimit = int(float64(maxLimit) * gen.SizeFactor)
+		}
 		maxitems = max(minitems, maxLimit)
 	}
 
@@ -570,13 +573,15 @@ func (gen *Generator) randomDateTime(mindate, maxdate *time.Time) time.Time {
 	return mindate.Add(time.Duration(gen.Rand.Float64() * float64(duration)))
 }
 
-func (gen *Generator) loremIpsum(minlength, maxlength int, unit LoremUnit) string {
+func (gen *Generator) loremIpsum(minlength, maxlength int, unit LoremUnit, limits *LimitNode) string {
 	if minlength < 0 {
 		minlength = 0
 	}
 	if maxlength < 0 {
-		// FIXME: make bound on maximum length configurable
-		maxlength = minlength + 10
+		maxLimit := limits.GetLimit()
+		if !gen.ForceMaxSize {
+			maxLimit = int(float64(maxLimit) * gen.SizeFactor)
+		}
 	}
 
 	length := minlength + gen.Rand.IntN(maxlength-minlength)
@@ -592,13 +597,15 @@ func (gen *Generator) loremIpsum(minlength, maxlength int, unit LoremUnit) strin
 	}
 }
 
-func (gen *Generator) book(minlength, maxlength int, path string) (string, error) {
+func (gen *Generator) book(minlength, maxlength int, path string, limits *LimitNode) (string, error) {
 	if minlength < 0 {
 		minlength = 0
 	}
 	if maxlength < 0 {
-		// FIXME: make bound on maximum length configurable
-		maxlength = minlength + 10
+		maxLimit := limits.GetLimit()
+		if !gen.ForceMaxSize {
+			maxLimit = int(float64(maxLimit) * gen.SizeFactor)
+		}
 	}
 
 	length := minlength + gen.Rand.IntN(maxlength-minlength)
