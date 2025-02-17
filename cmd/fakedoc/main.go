@@ -20,6 +20,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -60,6 +61,10 @@ Factor by which to multiply the maxima given in the limits file.
 Try to force size of arrays to their maxiumum as defined in the limits
 file and modified by the size factor.
 `
+
+	requireDocumentation = `
+Specifies with a regular expression what fields to force as required.
+`
 )
 
 func check(err error) {
@@ -78,6 +83,7 @@ func main() {
 		outputfile   string
 		numOutputs   int
 		formatted    bool
+		requireRegex string
 	)
 
 	flag.StringVar(&templatefile, "template", "", "template file")
@@ -88,6 +94,7 @@ func main() {
 	flag.StringVar(&outputfile, "o", "", outputDocumentation)
 	flag.IntVar(&numOutputs, "n", 1, numOutputDocumentation)
 	flag.BoolVar(&formatted, "f", false, formattedDocumentation)
+	flag.StringVar(&requireRegex, "require", "", requireDocumentation)
 	// Only used when compiled with 'profile' tag.
 	pf := addProfileFlags()
 	flag.Parse()
@@ -104,7 +111,8 @@ func main() {
 			templatefile, rng,
 			outputfile, limitsfile,
 			sizeFactor, forceMaxSize,
-			numOutputs, formatted)
+			numOutputs, formatted,
+			requireRegex)
 	}))
 }
 
@@ -115,6 +123,7 @@ func generate(
 	sizeFactor float64, forceMaxSize bool,
 	numOutputs int,
 	formatted bool,
+	requireFlag string,
 ) error {
 	templ, err := fakedoc.FromCSAFSchema()
 	if err != nil {
@@ -136,7 +145,12 @@ func generate(
 		}
 	}
 
-	generator := fakedoc.NewGenerator(templ, limits, sizeFactor, forceMaxSize, rng)
+	var requireRegex *regexp.Regexp
+	if requireRegex, err = regexp.Compile(requireFlag); err != nil {
+		return err
+	}
+
+	generator := fakedoc.NewGenerator(templ, limits, sizeFactor, forceMaxSize, rng, requireRegex)
 
 	if numOutputs == 1 {
 		return generateToFile(generator, outputfile, formatted)

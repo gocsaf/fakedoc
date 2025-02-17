@@ -20,6 +20,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -61,6 +62,7 @@ type Generator struct {
 	Limits          *Limits
 	SizeFactor      float64
 	ForceMaxSize    bool
+	RequireRegex    *regexp.Regexp
 	Rand            *rand.Rand
 	FileCache       map[string]string
 	NameSpaces      map[string]*NameSpace
@@ -183,6 +185,7 @@ func NewGenerator(
 	sizeFactor float64,
 	forceMaxSize bool,
 	rng *rand.Rand,
+	requireRegex *regexp.Regexp,
 ) *Generator {
 	if rng == nil {
 		seed1, seed2 := rand.Uint64(), rand.Uint64()
@@ -195,6 +198,7 @@ func NewGenerator(
 		SizeFactor:      sizeFactor,
 		ForceMaxSize:    forceMaxSize,
 		Rand:            rng,
+		RequireRegex:    requireRegex,
 		FileCache:       map[string]string{},
 		NameSpaces:      map[string]*NameSpace{},
 		namespaceIDErrs: map[string]error{},
@@ -452,11 +456,19 @@ func (gen *Generator) randomOneOf(oneof []string, limits *LimitNode, depth int) 
 	return nil, fmt.Errorf("could not generate any of %v", oneof)
 }
 
+func (gen *Generator) isForceRequired(property *Property) bool {
+	if gen.RequireRegex != nil {
+		return gen.RequireRegex.MatchString(property.Name)
+	} else {
+		return false
+	}
+}
+
 func (gen *Generator) generateObject(node *TmplObject, limits *LimitNode, depth int) (any, error) {
 	var optional, required []*Property
 	for _, prop := range node.Properties {
 		switch {
-		case prop.Required:
+		case prop.Required || gen.isForceRequired(prop):
 			required = append(required, prop)
 		default:
 			optional = append(optional, prop)
