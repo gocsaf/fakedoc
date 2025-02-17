@@ -146,11 +146,14 @@ func generate(
 	}
 
 	var requireRegex *regexp.Regexp
-	if requireRegex, err = regexp.Compile(requireFlag); err != nil {
-		return err
+	if requireFlag != "" {
+		if requireRegex, err = regexp.Compile(requireFlag); err != nil {
+			return err
+		}
 	}
 
-	generator := fakedoc.NewGenerator(templ, limits, sizeFactor, forceMaxSize, rng, requireRegex)
+	generator := fakedoc.NewGenerator(
+		templ, limits, sizeFactor, forceMaxSize, rng, requireRegex)
 
 	if numOutputs == 1 {
 		return generateToFile(generator, outputfile, formatted)
