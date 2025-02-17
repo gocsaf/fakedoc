@@ -333,7 +333,10 @@ func (gen *Generator) randomArray(tmpl *TmplArray, limits *LimitNode, depth int)
 		minitems = 0
 	}
 	if maxitems < 0 {
-		maxLimit := int(gen.SizeFactor * float64(limits.GetLimit()))
+		maxLimit := limits.GetLimit()
+		if !gen.ForceMaxSize {
+			maxLimit = int(float64(maxLimit) * gen.SizeFactor)
+		}
 		maxitems = max(minitems, maxLimit)
 	}
 
