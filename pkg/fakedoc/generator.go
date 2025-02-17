@@ -456,19 +456,16 @@ func (gen *Generator) randomOneOf(oneof []string, limits *LimitNode, depth int) 
 	return nil, fmt.Errorf("could not generate any of %v", oneof)
 }
 
-func (gen *Generator) isForceRequired(property *Property) bool {
-	if gen.RequireRegex != nil {
-		return gen.RequireRegex.MatchString(property.Name)
-	} else {
-		return false
-	}
+func (gen *Generator) forceRequired(property *Property) bool {
+	return gen.RequireRegex != nil &&
+		gen.RequireRegex.MatchString(property.Name)
 }
 
 func (gen *Generator) generateObject(node *TmplObject, limits *LimitNode, depth int) (any, error) {
 	var optional, required []*Property
 	for _, prop := range node.Properties {
 		switch {
-		case prop.Required || gen.isForceRequired(prop):
+		case prop.Required || gen.forceRequired(prop):
 			required = append(required, prop)
 		default:
 			optional = append(optional, prop)
