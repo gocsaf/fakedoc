@@ -13,7 +13,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -23,6 +22,8 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+
+	"github.com/spf13/pflag"
 
 	"github.com/gocsaf/fakedoc/pkg/fakedoc"
 )
@@ -40,7 +41,7 @@ with '.json'
 `
 
 	numOutputDocumentation = `
-How many documents to generate . If greate than 1, the output filename
+How many documents to generate. If greate than 1, the output filename
 must be given. It is treated as a template for filenames in which {{$}}
 will be replaced with the number of the file, starting with 0.
 `
@@ -86,18 +87,18 @@ func main() {
 		requireRegex string
 	)
 
-	flag.StringVar(&templatefile, "template", "", "template file")
-	flag.StringVar(&limitsfile, "l", "", limitsDocumentation)
-	flag.Float64Var(&sizeFactor, "size", 0.00001, sizeFactorDocumentation)
-	flag.BoolVar(&forceMaxSize, "force-max-size", false, forceMaxSizeDocumentation)
-	flag.StringVar(&seed, "seed", "", seedDocumentation)
-	flag.StringVar(&outputfile, "o", "", outputDocumentation)
-	flag.IntVar(&numOutputs, "n", 1, numOutputDocumentation)
-	flag.BoolVar(&formatted, "f", false, formattedDocumentation)
-	flag.StringVar(&requireRegex, "require", "", requireDocumentation)
+	pflag.StringVarP(&templatefile, "template", "t", "", "template file")
+	pflag.StringVarP(&limitsfile, "limit-file", "l", "", limitsDocumentation)
+	pflag.Float64VarP(&sizeFactor, "size", "", 0.00001, sizeFactorDocumentation)
+	pflag.BoolVarP(&forceMaxSize, "force-max-size", "", false, forceMaxSizeDocumentation)
+	pflag.StringVarP(&seed, "seed", "", "", seedDocumentation)
+	pflag.StringVarP(&outputfile, "output-file", "o", "", outputDocumentation)
+	pflag.IntVarP(&numOutputs, "number-output", "n", 1, numOutputDocumentation)
+	pflag.BoolVarP(&formatted, "format", "f", false, formattedDocumentation)
+	pflag.StringVarP(&requireRegex, "require", "", "", requireDocumentation)
 	// Only used when compiled with 'profile' tag.
 	pf := addProfileFlags()
-	flag.Parse()
+	pflag.Parse()
 
 	if numOutputs > 1 && outputfile == "" {
 		log.Fatal("Multiple outputs require an explicit output file template")
