@@ -165,6 +165,7 @@ func generate(
 	}
 
 	for n := range numOutputs {
+		fmt.Printf("\r[%d/%d]", n+1, numOutputs)
 		filename, err := makeFilename(tmplFilename, n)
 		if err != nil {
 			return err
