@@ -7,4 +7,4 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 )
 
-require github.com/go-loremipsum/loremipsum v1.1.3 // indirect
+require github.com/go-loremipsum/loremipsum v1.1.3
