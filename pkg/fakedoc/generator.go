@@ -578,9 +578,9 @@ func (gen *Generator) loremIpsum(minlength, maxlength int, unit LoremUnit, limit
 		minlength = 0
 	}
 	if maxlength < 0 {
-		maxLimit := limits.GetLimit()
+		maxlength = limits.GetLimit()
 		if !gen.ForceMaxSize {
-			maxLimit = int(float64(maxLimit) * gen.SizeFactor)
+			maxlength = int(float64(maxlength) * gen.SizeFactor)
 		}
 	}
 
@@ -602,9 +602,9 @@ func (gen *Generator) book(minlength, maxlength int, path string, limits *LimitN
 		minlength = 0
 	}
 	if maxlength < 0 {
-		maxLimit := limits.GetLimit()
+		maxlength = limits.GetLimit()
 		if !gen.ForceMaxSize {
-			maxLimit = int(float64(maxLimit) * gen.SizeFactor)
+			maxlength = int(float64(maxlength) * gen.SizeFactor)
 		}
 	}
 
