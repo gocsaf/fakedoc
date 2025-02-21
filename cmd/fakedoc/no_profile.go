@@ -10,12 +10,14 @@
 
 package main
 
+import "github.com/jessevdk/go-flags"
+
 // profileFlags is empty.
 type profileFlags struct{}
 
 // addProfileFlags does nothing and returns nil.
-func addProfileFlags() *profileFlags {
-	return nil
+func addProfileFlags(_ *flags.Parser) (*profileFlags, error) {
+	return nil, nil
 }
 
 // profile only calls fn and returns its return value.

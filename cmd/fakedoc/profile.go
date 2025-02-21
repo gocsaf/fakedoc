@@ -12,40 +12,34 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"os"
 	"runtime"
 	"runtime/pprof"
-)
 
-const (
-	cpuProfileDocumentation = `
-Name of the profile file. If empty (default) no profile file is written.
-`
-	memProfileDocumentation = `
-Name of the memory profile file. If empty (default) no memory profile file is written.
-`
+	"github.com/jessevdk/go-flags"
 )
 
 type profileFlags struct {
-	// cpuProfile is the file name of the cpu profile.
-	cpuProfile string
-	// memProfile is the file name of the memory profile.
-	memProfile string
+	// CpuProfile is the file name of the cpu profile.
+	CpuProfile string `long:"cpuprofile" description:"Name of the profile file. If empty (default) no profile file is written."`
+	// MemProfile is the file name of the memory profile.
+	MemProfile string `long:"memprofile" description:"Name of the memory profile file. If empty (default) no memory profile file is written."`
 }
 
 // addProfileFlags adds flags for the profiler to the command line parser.
-func addProfileFlags() *profileFlags {
+func addProfileFlags(parser *flags.Parser) (*profileFlags, error) {
 	pf := profileFlags{}
-	flag.StringVar(&pf.cpuProfile, "cpuprofile", "", cpuProfileDocumentation)
-	flag.StringVar(&pf.memProfile, "memprofile", "", memProfileDocumentation)
-	return &pf
+	_, err := parser.AddGroup("Profile flags", "Configuration for profile collection", &pf)
+	if err != nil {
+		return nil, err
+	}
+	return &pf, nil
 }
 
 // profile create cpu and/or mery profile files for the given function.
 func (pf *profileFlags) profile(fn func() error) error {
-	if pf.cpuProfile != "" {
-		f, err := os.Create(pf.cpuProfile)
+	if pf.CpuProfile != "" {
+		f, err := os.Create(pf.CpuProfile)
 		if err != nil {
 			return err
 		}
@@ -56,8 +50,8 @@ func (pf *profileFlags) profile(fn func() error) error {
 		defer pprof.StopCPUProfile()
 	}
 	ret := fn()
-	if pf.memProfile != "" {
-		f, err := os.Create(pf.memProfile)
+	if pf.MemProfile != "" {
+		f, err := os.Create(pf.MemProfile)
 		if err != nil {
 			return errors.Join(ret, err)
 		}

@@ -34,7 +34,7 @@ func check(err error) {
 	}
 }
 
-type options struct {
+type Options struct {
 	Version      bool    `long:"version" description:"Display version of the binary"`
 	TemplateFile string  `long:"template" short:"t" description:"Template file"`
 	LimitsFile   string  `long:"limit-file" short:"l" description:"Guidance on the Size of CSAF Documents."`
@@ -48,16 +48,18 @@ type options struct {
 }
 
 func main() {
-	var opts options
+	var opts Options
 	parser := flags.NewParser(&opts, flags.Default)
-	parser.Parse()
+	// Only used when compiled with 'profile' tag.
+	pf, err := addProfileFlags(parser)
+	check(err)
+
+	_, err = parser.Parse()
+	check(err)
 	if opts.Version {
 		fmt.Println(fakedoc.SemVersion)
 		return
 	}
-
-	// Only used when compiled with 'profile' tag.
-	pf := addProfileFlags()
 
 	if opts.NumOutputs > 1 && opts.OutputFile == "" {
 		log.Fatal("Multiple outputs require an explicit output file template")
