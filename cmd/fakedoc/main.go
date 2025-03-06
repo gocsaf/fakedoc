@@ -55,7 +55,13 @@ func main() {
 	check(err)
 
 	_, err = parser.Parse()
-	check(err)
+	if err != nil {
+		if flags.WroteHelp(err) {
+			os.Exit(0)
+		}
+		log.Fatal(err)
+	}
+
 	if opts.Version {
 		fmt.Println(fakedoc.SemVersion)
 		return
