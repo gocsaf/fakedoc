@@ -607,8 +607,11 @@ func (gen *Generator) book(minlength, maxlength int, path string, limits *LimitN
 			maxlength = int(float64(maxlength) * gen.SizeFactor)
 		}
 	}
+	if maxlength < minlength {
+		maxlength = minlength
+	}
 
-	length := minlength + gen.Rand.IntN(maxlength-minlength)
+	length := minlength + gen.Rand.IntN(maxlength-minlength+1)
 	content, ok := gen.FileCache[path]
 	if !ok {
 		file, err := os.Open(path)
