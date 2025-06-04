@@ -132,7 +132,11 @@ func generate(
 		templ, limits, sizeFactor, forceMaxSize, rng, requireRegex, verbose)
 
 	if numOutputs == 1 {
-		return generateToFile(generator, outputfile, formatted)
+		err := generateToFile(generator, outputfile, formatted)
+		if outputfile != "" {
+			generator.Verbosef("\n")
+		}
+		return err
 	}
 
 	tmplFilename, err := template.New("filename").Parse(outputfile)

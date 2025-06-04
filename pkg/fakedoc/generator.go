@@ -625,7 +625,7 @@ func (gen *Generator) book(minlength, maxlength int, path string, limits *LimitN
 	length := minlength + gen.Rand.IntN(maxlength-minlength+1)
 	content, ok := gen.FileCache[path]
 	if !ok {
-		gen.Verbosef("Loading book %q\n", path)
+		gen.Verbosef("\nLoading book %q\n", path)
 		file, err := os.Open(path)
 		if err != nil {
 			return "", err
