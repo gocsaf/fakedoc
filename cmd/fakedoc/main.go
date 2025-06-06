@@ -45,6 +45,7 @@ type Options struct {
 	NumOutputs   int     `long:"num-outputs" short:"n" default:"1" description:"How many documents to generate . If greater than 1, the output filename must be given. It is treated as a template for filenames in which {{$}} will be replaced with the number of the file, starting with 0."`
 	Formatted    bool    `long:"format" short:"f" description:"Output JSON should be formatted."`
 	RequireRegex string  `long:"require" description:"Specifies with a regular expression what fields to force as required."`
+	Verbose      bool    `long:"verbose" short:"v" description:"Verbose output"`
 }
 
 func main() {
@@ -80,7 +81,7 @@ func main() {
 			opts.OutputFile, opts.LimitsFile,
 			opts.SizeFactor, opts.ForceMaxSize,
 			opts.NumOutputs, opts.Formatted,
-			opts.RequireRegex)
+			opts.RequireRegex, opts.Verbose)
 	}))
 }
 
@@ -92,6 +93,7 @@ func generate(
 	numOutputs int,
 	formatted bool,
 	requireFlag string,
+	verbose bool,
 ) error {
 	templ, err := fakedoc.FromCSAFSchema()
 	if err != nil {
@@ -99,6 +101,9 @@ func generate(
 	}
 
 	if templatefile != "" {
+		if verbose {
+			fmt.Printf("Loading template %q\n", templatefile)
+		}
 		overrides, err := fakedoc.LoadTemplate(templatefile)
 		if err != nil {
 			return err
@@ -108,6 +113,9 @@ func generate(
 
 	var limits *fakedoc.Limits
 	if limitsfile != "" {
+		if verbose {
+			fmt.Printf("Loading limits %q\n", limitsfile)
+		}
 		if limits, err = fakedoc.LoadLimitsFromFile(limitsfile); err != nil {
 			return err
 		}
@@ -121,10 +129,14 @@ func generate(
 	}
 
 	generator := fakedoc.NewGenerator(
-		templ, limits, sizeFactor, forceMaxSize, rng, requireRegex)
+		templ, limits, sizeFactor, forceMaxSize, rng, requireRegex, verbose)
 
 	if numOutputs == 1 {
-		return generateToFile(generator, outputfile, formatted)
+		err := generateToFile(generator, outputfile, formatted)
+		if outputfile != "" {
+			generator.Verbosef("\n")
+		}
+		return err
 	}
 
 	tmplFilename, err := template.New("filename").Parse(outputfile)
@@ -143,6 +155,7 @@ func generate(
 			return err
 		}
 	}
+	generator.Verbosef("\n")
 
 	return nil
 }
@@ -162,6 +175,9 @@ func generateToFile(
 	outputfile string,
 	formatted bool,
 ) error {
+	if outputfile != "" {
+		generator.Verbosef("generating %q", outputfile)
+	}
 	csaf, err := generator.Generate()
 	if err != nil {
 		return err

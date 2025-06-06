@@ -63,6 +63,7 @@ type Generator struct {
 	SizeFactor      float64
 	ForceMaxSize    bool
 	RequireRegex    *regexp.Regexp
+	Verbose         bool
 	Rand            *rand.Rand
 	FileCache       map[string]string
 	NameSpaces      map[string]*NameSpace
@@ -186,6 +187,7 @@ func NewGenerator(
 	forceMaxSize bool,
 	rng *rand.Rand,
 	requireRegex *regexp.Regexp,
+	verbose bool,
 ) *Generator {
 	if rng == nil {
 		seed1, seed2 := rand.Uint64(), rand.Uint64()
@@ -199,9 +201,18 @@ func NewGenerator(
 		ForceMaxSize:    forceMaxSize,
 		Rand:            rng,
 		RequireRegex:    requireRegex,
+		Verbose:         verbose,
 		FileCache:       map[string]string{},
 		NameSpaces:      map[string]*NameSpace{},
 		namespaceIDErrs: map[string]error{},
+	}
+}
+
+// Verbosef prints a message to stdout if the verbose flag is true. The
+// parameters are passed through to fmt.Printf.
+func (gen *Generator) Verbosef(format string, a ...any) {
+	if gen.Verbose {
+		fmt.Printf(format, a...)
 	}
 }
 
@@ -614,6 +625,7 @@ func (gen *Generator) book(minlength, maxlength int, path string, limits *LimitN
 	length := minlength + gen.Rand.IntN(maxlength-minlength+1)
 	content, ok := gen.FileCache[path]
 	if !ok {
+		gen.Verbosef("\nLoading book %q\n", path)
 		file, err := os.Open(path)
 		if err != nil {
 			return "", err
