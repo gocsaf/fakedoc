@@ -11,7 +11,7 @@
 # Fake CSAF document generator
 
 Will allow the creation
-of one or many fake CSAF 2.0 documents to explore
+of one or many fake CSAF 2.0/2.1 documents to explore
 and test implementations of this standard.
 
 Will use the CSAF Go library where appropriate.
@@ -66,6 +66,17 @@ named `csaf-0.json` through `csaf-99.json`:
 ```
 
 To generate large documents, one can use the something like this:
+
+``` shell
+./fakedoc -o random-csaf.json -l limits.json --force-max-size
+```
+
+By default fakedoc generates CSAF 2.0 documents but it supports CSAF 2.1
+documents as well. If you want to specify the version you can use the option `--csaf-version`:
+
+``` shell
+./fakedoc -o random-csaf.json --csaf-version="2.1"
+```
 
 ``` shell
 ./fakedoc -o random-csaf.json -l limits.json --force-max-size
