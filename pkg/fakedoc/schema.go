@@ -19,8 +19,14 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-//go:embed schema/csaf_json_schema.json
-var csafSchema []byte
+//go:embed schema/csaf_json_schema_2.0.json
+var csafSchema20 []byte
+
+//go:embed schema/csaf_json_schema_2.1.json
+var csafSchema21 []byte
+
+//go:embed schema/csaf-meta.json
+var csafMetaSchema []byte
 
 //go:embed schema/cvss-v2.0.json
 var cvss20 []byte
@@ -31,6 +37,15 @@ var cvss30 []byte
 //go:embed schema/cvss-v3.1.json
 var cvss31 []byte
 
+//go:embed schema/cvss-v4.0.json
+var cvss40 []byte
+
+//go:embed schema/cvss-meta.json
+var cvssMeta []byte
+
+//go:embed schema/SelectionList_2_0_0.schema.json
+var selectionListSchema []byte
+
 type compiledSchema struct {
 	url      string
 	once     sync.Once
@@ -39,14 +54,21 @@ type compiledSchema struct {
 }
 
 const (
-	csafSchemaURL   = "https://docs.oasis-open.org/csaf/csaf/v2.0/csaf_json_schema.json"
-	cvss20SchemaURL = "https://www.first.org/cvss/cvss-v2.0.json"
-	cvss30SchemaURL = "https://www.first.org/cvss/cvss-v3.0.json"
-	cvss31SchemaURL = "https://www.first.org/cvss/cvss-v3.1.json"
+	csaf20SchemaURL           = "https://docs.oasis-open.org/csaf/csaf/v2.0/csaf_json_schema.json"
+	csaf21SchemaURL           = "https://docs.oasis-open.org/csaf/csaf/v2.1/schema/csaf.json"
+	csaf21ExtensionContentURL = "https://docs.oasis-open.org/csaf/csaf/v2.1/schema/extension-content.json"
+	csafMetaSchemaURL         = "https://docs.oasis-open.org/csaf/csaf/v2.1/schema/meta.json"
+	cvss20SchemaURL           = "https://www.first.org/cvss/cvss-v2.0.json"
+	cvss30SchemaURL           = "https://www.first.org/cvss/cvss-v3.0.json"
+	cvss31SchemaURL           = "https://www.first.org/cvss/cvss-v3.1.json"
+	cvss40SchemaURL           = "https://www.first.org/cvss/cvss-v4.0.json"
+	cvssMetaSchemaURL         = "https://www.first.org/cvss/meta.json"
+	selectionListSchemaURL    = "https://certcc.github.io/SSVC/data/schema/v2/SelectionList_2_0_0.schema.json"
 )
 
 var (
-	compiledCSAFSchema = compiledSchema{url: csafSchemaURL}
+	compiledCSAFSchema20 = compiledSchema{url: csaf20SchemaURL}
+	compiledCSAFSchema21 = compiledSchema{url: csaf21SchemaURL}
 )
 
 // loadURL loads the content of an URL from embedded data or
@@ -56,14 +78,26 @@ func loadURL(s string) (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(data)), nil
 	}
 	switch s {
-	case csafSchemaURL:
-		return loader(csafSchema)
+	case csaf20SchemaURL:
+		return loader(csafSchema20)
+	case csaf21SchemaURL:
+		return loader(csafSchema21)
+	case csafMetaSchemaURL:
+		return loader(csafMetaSchema)
+	case csaf21ExtensionContentURL:
+		return loader(csafSchema21)
 	case cvss20SchemaURL:
 		return loader(cvss20)
 	case cvss30SchemaURL:
 		return loader(cvss30)
 	case cvss31SchemaURL:
 		return loader(cvss31)
+	case cvss40SchemaURL:
+		return loader(cvss40)
+	case cvssMetaSchemaURL:
+		return loader(cvssMeta)
+	case selectionListSchemaURL:
+		return loader(selectionListSchema)
 	default:
 		return jsonschema.LoadURL(s)
 	}
@@ -83,8 +117,13 @@ func (cs *compiledSchema) getSchema() (*jsonschema.Schema, error) {
 }
 
 // CompileSchema compiles and returns the JSON schema for CSAF
-func CompileSchema() (*jsonschema.Schema, error) {
-	return compiledCSAFSchema.getSchema()
+func CompileSchema20() (*jsonschema.Schema, error) {
+	return compiledCSAFSchema20.getSchema()
+}
+
+// CompileSchema compiles and returns the JSON schema for CSAF
+func CompileSchema21() (*jsonschema.Schema, error) {
+	return compiledCSAFSchema21.getSchema()
 }
 
 // ShortLocation returns a shortened version of the schema's Location.
@@ -102,7 +141,8 @@ func ShortLocation(schema *jsonschema.Schema) string {
 }
 
 var shortPrefixes = []struct{ short, prefix string }{
-	{"csaf", csafSchemaURL},
+	{"csaf20", csaf20SchemaURL},
+	{"csaf21", csaf21SchemaURL},
 	{"cvss20", cvss20SchemaURL},
 	{"cvss30", cvss30SchemaURL},
 	{"cvss31", cvss31SchemaURL},

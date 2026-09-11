@@ -25,7 +25,7 @@ func main() {
 }
 
 func createTemplate() error {
-	template, err := fakedoc.FromCSAFSchema()
+	template, err := fakedoc.FromCSAFSchema("2.0")
 	if err != nil {
 		return err
 	}
