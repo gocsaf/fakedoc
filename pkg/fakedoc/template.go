@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -465,17 +466,25 @@ func (t *TmplDateTime) Instantiate(gen *Generator, _ *LimitNode, _ int) (any, er
 
 // FromCSAFSchema creates a new template from the built-in CSAF JSON
 // schema
-func FromCSAFSchema() (*Template, error) {
-	schema, err := CompileSchema()
+func FromCSAFSchema(csafVersion string) (*Template, error) {
+	var (
+		schema *jsonschema.Schema
+		err    error
+	)
+	if csafVersion == "2.0" {
+		schema, err = CompileSchema20()
+	} else {
+		schema, err = CompileSchema21()
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	return FromSchema(schema)
+	return FromSchema(schema, csafVersion)
 }
 
 // FromSchema creates a default template from a JSON schema.
-func FromSchema(schema *jsonschema.Schema) (*Template, error) {
+func FromSchema(schema *jsonschema.Schema, csafVersion string) (*Template, error) {
 	template := &Template{
 		Types: make(map[string]TmplNode),
 		Root:  "",
@@ -486,7 +495,7 @@ func FromSchema(schema *jsonschema.Schema) (*Template, error) {
 	}
 	template.Root = root
 
-	if err := template.applyCSAFSpecials(); err != nil {
+	if err := template.applyCSAFSpecials(csafVersion); err != nil {
 		return nil, err
 	}
 
@@ -642,7 +651,7 @@ func getSimpleType(types []string) (string, error) {
 	return types[0], nil
 }
 
-func (t *Template) applyCSAFSpecials() error {
+func (t *Template) applyCSAFSpecials(csafVersion string) error {
 	t.Types[productIDTypeName] = &TmplID{
 		Namespace: productIDNamespace,
 	}
@@ -655,8 +664,10 @@ func (t *Template) applyCSAFSpecials() error {
 		errs = append(errs, err)
 	}
 
+	prefix := "csaf" + strings.Replace(csafVersion, ".", "", 1)
+
 	collectErr(t.modifyProperty(
-		"csaf:#/$defs/full_product_name_t",
+		prefix+":#/$defs/full_product_name_t",
 		"product_id",
 		func(p *Property) error {
 			p.Type = productIDTypeName
@@ -665,7 +676,7 @@ func (t *Template) applyCSAFSpecials() error {
 	))
 
 	collectErr(t.modifyProperty(
-		"csaf:#/properties/product_tree/properties/product_groups/items",
+		prefix+":#/properties/product_tree/properties/product_groups/items",
 		"group_id",
 		func(p *Property) error {
 			p.Type = groupIDTypeName
@@ -674,13 +685,13 @@ func (t *Template) applyCSAFSpecials() error {
 	))
 
 	collectErr(t.overwriteType(
-		"csaf:#/$defs/product_id_t",
+		prefix+":#/$defs/product_id_t",
 		&TmplRef{
 			Namespace: productIDNamespace,
 		},
 	))
 	collectErr(t.overwriteType(
-		"csaf:#/$defs/product_group_id_t",
+		prefix+":#/$defs/product_group_id_t",
 		&TmplRef{
 			Namespace: groupIDNamespace,
 		},

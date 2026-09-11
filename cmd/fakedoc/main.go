@@ -36,6 +36,7 @@ func check(err error) {
 
 type Options struct {
 	Version      bool    `long:"version" description:"Display version of the binary"`
+	CSAFVersion  string  `long:"csaf-version" default:"2.0" description:"Choose CSAF standard of the generated document (2.0 or 2.1)"`
 	TemplateFile string  `long:"template" short:"t" description:"Template file"`
 	LimitsFile   string  `long:"limit-file" short:"l" description:"Guidance on the Size of CSAF Documents."`
 	SizeFactor   float64 `long:"size" default:"0.00001" description:"Factor by which to multiply the maxima given in the limits file."`
@@ -81,7 +82,8 @@ func main() {
 			opts.OutputFile, opts.LimitsFile,
 			opts.SizeFactor, opts.ForceMaxSize,
 			opts.NumOutputs, opts.Formatted,
-			opts.RequireRegex, opts.Verbose)
+			opts.RequireRegex, opts.Verbose,
+			opts.CSAFVersion)
 	}))
 }
 
@@ -94,8 +96,9 @@ func generate(
 	formatted bool,
 	requireFlag string,
 	verbose bool,
+	csafVersion string,
 ) error {
-	templ, err := fakedoc.FromCSAFSchema()
+	templ, err := fakedoc.FromCSAFSchema(csafVersion)
 	if err != nil {
 		return err
 	}
